@@ -273,19 +273,18 @@ export default function BookingPage() {
                     onClick={() => setDate(key)}
                     className={cn(
                       'relative aspect-square rounded-xl text-sm font-medium transition-all duration-200',
-                      sel     ? 'bg-terracotta text-white shadow-warm scale-105' :
-                      avail   ? 'bg-warm-100 text-charcoal hover:bg-sand-200 hover:scale-105' :
-                      full    ? 'bg-red-50 text-red-300 cursor-not-allowed line-through' :
-                      past    ? 'text-charcoal-light/25 cursor-not-allowed' :
-                      blocked ? 'bg-warm-100 text-charcoal-light/30 cursor-not-allowed' :
-                                'text-charcoal-light/30 cursor-default'
+                      sel             ? 'bg-terracotta text-white shadow-warm scale-105' :
+                      past || blocked ? 'text-charcoal-light/25 cursor-not-allowed' :
+                      avail           ? 'bg-warm-100 text-charcoal hover:bg-sand-200 hover:scale-105' :
+                      full            ? 'bg-red-50 text-red-300 cursor-not-allowed line-through' :
+                                        'text-charcoal-light/30 cursor-default'
                     )}
                   >
                     {day}
-                    {isToday && !sel && (
+                    {isToday && !sel && !past && (
                       <span className="absolute top-0.5 right-1 text-[8px] text-terracotta font-bold leading-none">今</span>
                     )}
-                    {avail && !sel && (
+                    {avail && !sel && !past && !blocked && (
                       <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-terracotta/60" />
                     )}
                   </button>
