@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { MapPin, Mail, Instagram } from 'lucide-react'
+import { MapPin, Mail } from 'lucide-react'
 
 export default function Footer() {
   return (
@@ -9,8 +9,8 @@ export default function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-2xl">"Logo"</span>
-              <span className="font-display text-lg font-semibold text-white">伦敦糖豆人拼豆工作室</span>
+              <span className="text-2xl">🫘</span>
+              <span className="font-display text-lg font-semibold text-white">糖豆人手工工作室</span>
             </div>
             <p className="text-sm leading-relaxed text-white/60">
               在伦敦，用一颗颗小豆子，<br />拼出你独一无二的糖豆人。
@@ -42,26 +42,22 @@ export default function Footer() {
             <ul className="space-y-2.5 text-sm">
               <li className="flex items-start gap-2">
                 <MapPin size={14} className="mt-0.5 shrink-0 text-terracotta-light" />
-                <span>London, United Kingdom<br /><span className="text-white/50">（英国时区 GMT/BST）</span></span>
+                <span>
+                  Unit 226, 65-75 Whitechapel Road<br />
+                  London E1 1DU<br />
+                  <span className="text-white/50">英国时区 GMT/BST</span>
+                </span>
               </li>
               <li className="flex items-center gap-2">
                 <Mail size={14} className="shrink-0 text-terracotta-light" />
-                <a href="mailto:hello@pinbean.studio" className="hover:text-terracotta-light transition-colors">
-                  hello@pinbean.studio
-                </a>
-              </li>
-              <li className="flex items-center gap-2">
-                <Instagram size={14} className="shrink-0 text-terracotta-light" />
-                <a href="#" className="hover:text-terracotta-light transition-colors">
-                  @pinbean.studio
-                </a>
+                <span className="text-white/50">邮箱即将开放</span>
               </li>
             </ul>
           </div>
         </div>
 
         <div className="mt-10 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
-          <p>© 2025 拼豆工作室 Pinbean Studio. All rights reserved.</p>
+          <p>© 2025 糖豆人手工工作室. All rights reserved.</p>
           <Link href="/login" className="hover:text-white/60 transition-colors">
             管理员入口
           </Link>

@@ -38,7 +38,7 @@ export default function NavBar() {
         <Link href="/" className="flex items-center gap-2 group">
           <span className="text-2xl select-none">"Logo"</span>
           <span className="font-display text-lg font-semibold text-charcoal group-hover:text-terracotta transition-colors">
-            伦敦糖豆人拼豆工作室
+            糖豆人手工工作室
           </span>
         </Link>
 

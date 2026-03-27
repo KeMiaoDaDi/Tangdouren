@@ -30,7 +30,7 @@ export default function Sidebar({ active }: { active: string }) {
       <div className="px-4 py-5 border-b border-white/10">
         <div className="flex items-center gap-2">
           <span className="text-xl">🫘</span>
-          <span className="font-display text-base font-semibold text-white">拼豆工作室</span>
+          <span className="font-display text-base font-semibold text-white">糖豆人手工工作室</span>
         </div>
         <p className="text-xs text-white/40 mt-0.5">后台管理系统</p>
       </div>

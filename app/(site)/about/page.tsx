@@ -22,7 +22,7 @@ export default function AboutPage() {
                 用豆子<span className="text-terracotta">讲故事</span>
               </h1>
               <p className="text-charcoal-light leading-relaxed mb-4">
-                拼豆工作室（Pinbean Studio）是一家坐落于伦敦的手作体验工作室，专注于拼豆（Hama Beads / Perler Beads）这门充满趣味的手工艺。
+                糖豆人手工工作室是一家坐落于伦敦东区 Whitechapel 的手作体验工作室，专注于拼豆（Hama Beads / Perler Beads）这门充满趣味的手工艺。
               </p>
               <p className="text-charcoal-light leading-relaxed mb-6">
                 我们相信，每个人心里都有一个想要亲手创造美好事物的念头。

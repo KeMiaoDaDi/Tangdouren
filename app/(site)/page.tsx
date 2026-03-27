@@ -229,13 +229,13 @@ export default function HomePage() {
               <span className="text-terracotta text-sm font-medium tracking-wider uppercase">找到我们</span>
               <h2 className="section-title mt-2 mb-4">来伦敦看看我们</h2>
               <p className="section-subtitle mb-6">
-                工作室位于伦敦市中心，交通便利，环境温馨。工作时间为英国本地时间（GMT/BST），
-                预约确认后会发送详细地址。
+                工作室位于伦敦东区 Whitechapel，交通便利，步行即可到达地铁站。
+                工作时间为英国本地时间（GMT/BST）。
               </p>
 
               <ul className="space-y-4">
                 {[
-                  { icon: MapPin,  label: '地址', value: 'London, United Kingdom' },
+                  { icon: MapPin,  label: '地址', value: 'Unit 226, 65-75 Whitechapel Road, London E1 1DU' },
                   { icon: Clock,   label: '营业时间', value: '周三至周日 10:00 – 18:00 (GMT/BST)' },
                   { icon: Users,   label: '每场人数', value: '最多 4 人，温馨小班' },
                 ].map(({ icon: Icon, label, value }) => (
@@ -259,9 +259,19 @@ export default function HomePage() {
 
             {/* Map placeholder */}
             <div className="relative h-72 lg:h-96 rounded-2xl overflow-hidden bg-gradient-to-br from-sand-100 to-warm-200 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-3">🗺️</div>
-                <p className="text-charcoal-light text-sm">预约确认后提供详细地址</p>
+              <div className="text-center px-6">
+                <div className="text-6xl mb-3">📍</div>
+                <p className="font-semibold text-charcoal">Unit 226</p>
+                <p className="text-charcoal-light text-sm mt-1">65-75 Whitechapel Road</p>
+                <p className="text-charcoal-light text-sm">London E1 1DU</p>
+                <a
+                  href="https://maps.google.com/?q=65-75+Whitechapel+Road+London+E1+1DU"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-block text-xs text-terracotta hover:underline"
+                >
+                  在 Google Maps 查看 →
+                </a>
               </div>
               <div className="absolute inset-0 border-2 border-dashed border-sand-200 rounded-2xl m-4 opacity-40 pointer-events-none" />
             </div>
