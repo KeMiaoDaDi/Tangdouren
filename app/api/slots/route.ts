@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // GET /api/slots?year=2026&month=3
 // 返回指定月份所有活跃 slot 及各自剩余容量
@@ -18,7 +19,9 @@ export async function GET(request: NextRequest) {
   const to   = `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`
 
   try {
+    // slots 和 blocked_dates 用普通客户端，bookings 需要 admin 客户端（anon 无 SELECT 权限）
     const supabase = await createClient()
+    const admin    = createAdminClient()
 
     // 1. 获取该月所有活跃 slot
     const { data: slots, error: slotsErr } = await supabase
@@ -32,8 +35,8 @@ export async function GET(request: NextRequest) {
 
     if (slotsErr) throw slotsErr
 
-    // 2. 获取该月所有未取消的预约（聚合已预约人数）
-    const { data: bookings, error: bookingsErr } = await supabase
+    // 2. 获取该月所有未取消的预约（用 admin 客户端绕过 RLS）
+    const { data: bookings, error: bookingsErr } = await admin
       .from('bookings')
       .select('slot_id, party_size')
       .in('slot_id', (slots ?? []).map(s => s.id))
