@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
 
 const BookingSchema = z.object({
@@ -23,11 +24,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { slotId, customerName, contact, contactType, partySize, note } = parsed.data
-    const supabase = await createClient()
 
-    // 使用数据库函数原子检查容量并插入（利用触发器兜底）
+    // admin 客户端绕过 RLS，确保预约可靠写入
+    const adminSupabase = createAdminClient()
+
     // 先查 slot 是否存在且活跃
-    const { data: slot, error: slotErr } = await supabase
+    const { data: slot, error: slotErr } = await adminSupabase
       .from('slot_templates')
       .select('id, capacity, is_active, date')
       .eq('id', slotId)
@@ -38,8 +40,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '该时段不存在或已停用' }, { status: 404 })
     }
 
-    // 查当前已预约人数（乐观检查，触发器会做最终保障）
-    const { data: existing } = await supabase
+    // 查当前已预约人数
+    const { data: existing } = await adminSupabase
       .from('bookings')
       .select('party_size')
       .eq('slot_id', slotId)
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 检查同一联系方式是否已预约同一 slot
-    const { data: duplicate } = await supabase
+    const { data: duplicate } = await adminSupabase
       .from('bookings')
       .select('id')
       .eq('slot_id', slotId)
@@ -64,8 +66,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '您已预约该时段，请勿重复提交' }, { status: 409 })
     }
 
-    // 写入预约记录（数据库触发器会再次校验容量）
-    const { data: booking, error: insertErr } = await supabase
+    // 写入预约记录（admin 客户端，绕过 RLS）
+    const { data: booking, error: insertErr } = await adminSupabase
       .from('bookings')
       .insert({
         slot_id:       slotId,
