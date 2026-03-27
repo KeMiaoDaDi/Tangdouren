@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { CalendarDays, Users, CheckCircle2, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -171,7 +173,7 @@ export default async function DashboardPage() {
               )}
               {(recent ?? []).map(b => {
                 const st   = statusLabel[b.status] ?? { label: b.status, cls: '' }
-                const slot = b.slot_templates as { date: string; start_time: string; end_time: string; label: string } | null
+                const slot = (b.slot_templates as unknown) as { date: string; start_time: string; end_time: string; label: string } | null
                 return (
                   <tr key={b.id} className="hover:bg-warm-50 transition-colors">
                     <td className="px-5 py-3.5">
