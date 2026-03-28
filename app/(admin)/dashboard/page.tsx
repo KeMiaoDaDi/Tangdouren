@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { CalendarDays, Users, CheckCircle2, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const statusLabel: Record<string, { label: string; cls: string }> = {
   confirmed: { label: '已确认', cls: 'badge-confirmed' },
@@ -27,14 +27,14 @@ function londonMonthRange() {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const today = londonToday()
   const { from: monthFrom, to: monthTo } = londonMonthRange()
 
   // ── 今日预约数 ──────────────────────────────────────────────────────────────
   const { count: todayCount } = await supabase
     .from('bookings')
-    .select('id', { count: 'exact', head: true })
+    .select('id, slot_templates!inner(date)', { count: 'exact', head: true })
     .eq('slot_templates.date', today)
     .neq('status', 'cancelled')
 
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
   // ── 本月已完成数 ────────────────────────────────────────────────────────────
   const { count: completedCount } = await supabase
     .from('bookings')
-    .select('id', { count: 'exact', head: true })
+    .select('id, slot_templates!inner(date)', { count: 'exact', head: true })
     .eq('status', 'completed')
     .gte('slot_templates.date', monthFrom)
     .lte('slot_templates.date', monthTo)
