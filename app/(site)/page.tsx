@@ -59,9 +59,11 @@ export default async function HomePage() {
 
           <PixelBeadTitle />
 
-          <p className="animate-slide-up mt-6 text-lg text-charcoal-light max-w-lg mx-auto leading-relaxed"
+          <p className="animate-slide-up mt-6 text-center leading-loose text-lg text-charcoal-light mx-auto"
              style={{ animationDelay: '0.2s' }}>
-            我来伦敦只办三件事：拼豆，拼豆，还是拼豆！
+            我来伦敦只办三件事：<br />
+            拼豆，拼豆，<br />
+            还是拼豆！
           </p>
 
           <div className="animate-slide-up mt-16 flex flex-wrap items-center justify-center gap-4"
