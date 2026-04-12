@@ -6,99 +6,84 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const statusLabel: Record<string, { label: string; cls: string }> = {
   confirmed: { label: '已确认', cls: 'badge-confirmed' },
-  cancelled:  { label: '已取消', cls: 'badge-cancelled' },
-  completed:  { label: '已完成', cls: 'badge-completed' },
+  cancelled: { label: '已取消', cls: 'badge-cancelled' },
+  completed: { label: '已完成', cls: 'badge-completed' },
 }
 
-/** 伦敦当前日期字符串 "YYYY-MM-DD" */
+const tableTypeLabel: Record<string, string> = {
+  single: '单人桌', double: '双人桌', four: '四人桌',
+}
+
 function londonToday() {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/London' }).format(new Date())
 }
 
-/** 伦敦当前月份首日 / 末日 */
 function londonMonthRange() {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/London', year: 'numeric', month: '2-digit',
   }).formatToParts(new Date())
-  const y = parts.find(p => p.type === 'year')!.value
-  const m = parts.find(p => p.type === 'month')!.value
+  const y    = parts.find(p => p.type === 'year')!.value
+  const m    = parts.find(p => p.type === 'month')!.value
   const last = new Date(Number(y), Number(m), 0).getDate()
   return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(last).padStart(2, '0')}` }
 }
 
 export default async function DashboardPage() {
   const supabase = createAdminClient()
-  const today = londonToday()
+  const today    = londonToday()
   const { from: monthFrom, to: monthTo } = londonMonthRange()
 
-  // ── 今日预约数 ──────────────────────────────────────────────────────────────
+  // 今日预约数
   const { count: todayCount } = await supabase
     .from('bookings')
-    .select('id, slot_templates!inner(date)', { count: 'exact', head: true })
-    .eq('slot_templates.date', today)
+    .select('booking_id', { count: 'exact', head: true })
+    .eq('booking_date', today)
     .neq('status', 'cancelled')
 
-  // ── 今日时段 ────────────────────────────────────────────────────────────────
-  const { data: todaySlots } = await supabase
-    .from('slot_templates')
-    .select(`
-      id, label, start_time, end_time, capacity,
-      bookings ( party_size, status )
-    `)
-    .eq('date', today)
-    .eq('is_active', true)
+  // 今日时段概览（各桌预约情况）
+  const { data: todayBookings } = await supabase
+    .from('bookings')
+    .select('assigned_table_code, assigned_table_type, start_time, end_time, party_size, booking_mode, status')
+    .eq('booking_date', today)
+    .neq('status', 'cancelled')
     .order('start_time')
 
-  // ── 本月已完成数 ────────────────────────────────────────────────────────────
+  // 本月已完成数
   const { count: completedCount } = await supabase
     .from('bookings')
-    .select('id, slot_templates!inner(date)', { count: 'exact', head: true })
+    .select('booking_id', { count: 'exact', head: true })
     .eq('status', 'completed')
-    .gte('slot_templates.date', monthFrom)
-    .lte('slot_templates.date', monthTo)
+    .gte('booking_date', monthFrom)
+    .lte('booking_date', monthTo)
 
-  // ── 本月参与总人数 ──────────────────────────────────────────────────────────
+  // 本月参与总人数
   const { data: partySums } = await supabase
     .from('bookings')
-    .select('party_size, slot_templates!inner(date)')
+    .select('party_size')
     .neq('status', 'cancelled')
-    .gte('slot_templates.date', monthFrom)
-    .lte('slot_templates.date', monthTo)
+    .gte('booking_date', monthFrom)
+    .lte('booking_date', monthTo)
 
   const totalPeople = (partySums ?? []).reduce((s, b) => s + (b.party_size ?? 0), 0)
 
-  // ── 最近 5 条预约 ────────────────────────────────────────────────────────────
+  // 最近 5 条预约
   const { data: recent } = await supabase
     .from('bookings')
-    .select(`
-      id, customer_name, contact, contact_type,
-      party_size, status, created_at,
-      slot_templates ( date, start_time, end_time, label )
-    `)
+    .select('booking_id, customer_name, phone, party_size, accepts_sharing, booking_date, start_time, end_time, assigned_table_code, assigned_table_type, status, created_at')
     .order('created_at', { ascending: false })
     .limit(5)
 
-  // ── 整理今日时段数据 ──────────────────────────────────────────────────────
-  const slotsForToday = (todaySlots ?? []).map(slot => {
-    const booked = (slot.bookings ?? [])
-      .filter((b: { status: string }) => b.status !== 'cancelled')
-      .reduce((s: number, b: { party_size: number }) => s + b.party_size, 0)
-    return { ...slot, booked }
-  })
-
   const stats = [
-    { label: '今日预约',    value: String(todayCount ?? 0),   sub: today,          icon: CalendarDays, color: 'bg-terracotta/10 text-terracotta' },
+    { label: '今日预约',    value: String(todayCount ?? 0),    sub: today,           icon: CalendarDays, color: 'bg-terracotta/10 text-terracotta' },
     { label: '本月已完成',  value: String(completedCount ?? 0), sub: '场次',          icon: CheckCircle2, color: 'bg-sage/10 text-sage-dark' },
-    { label: '本月参与人数', value: String(totalPeople),        sub: '人次（未取消）', icon: Users,        color: 'bg-blue-100 text-blue-600' },
+    { label: '本月参与人数', value: String(totalPeople),         sub: '人次（未取消）', icon: Users,        color: 'bg-blue-100 text-blue-600' },
   ]
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="font-display text-2xl font-bold text-charcoal">概览</h1>
-        <p className="text-sm text-charcoal-light mt-0.5">
-          拼豆工作室后台 · 英国时间 {today}
-        </p>
+        <p className="text-sm text-charcoal-light mt-0.5">拼豆工作室后台 · 英国时间 {today}</p>
       </div>
 
       {/* Stats */}
@@ -117,39 +102,41 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Today's slots */}
+      {/* 今日预约概览 */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-charcoal text-sm">今日时段概览</h2>
-          <Link href="/dashboard/slots" className="text-xs text-terracotta hover:underline">配置 Slot →</Link>
+          <h2 className="font-semibold text-charcoal text-sm">今日预约列表</h2>
+          <Link href="/dashboard/bookings" className="text-xs text-terracotta hover:underline">查看全部 →</Link>
         </div>
-        {slotsForToday.length === 0 ? (
-          <p className="text-sm text-charcoal-light py-4 text-center">今日暂无排班 Slot</p>
+        {!todayBookings || todayBookings.length === 0 ? (
+          <p className="text-sm text-charcoal-light py-4 text-center">今日暂无预约</p>
         ) : (
-          <div className="flex gap-3 overflow-x-auto pb-1">
-            {slotsForToday.map(slot => (
-              <div key={slot.id} className="shrink-0 rounded-xl border border-sand-200 bg-warm-50 p-3 w-36 text-center">
-                <div className="text-xs text-charcoal-light mb-0.5">{slot.start_time}–{slot.end_time}</div>
-                <div className="font-semibold text-sm text-charcoal">{slot.label}</div>
-                <div className="mt-2">
-                  <div className="h-1.5 w-full rounded-full bg-sand-200 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-terracotta transition-all"
-                      style={{ width: `${Math.min((slot.booked / slot.capacity) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="text-xs text-charcoal-light mt-1">
-                  {slot.booked}/{slot.capacity} 位
-                  {slot.booked >= slot.capacity && <span className="ml-1 text-red-500">满</span>}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-charcoal-light border-b border-sand-100">
+                  <th className="text-left py-2 font-medium">时段</th>
+                  <th className="text-left py-2 font-medium">桌号</th>
+                  <th className="text-left py-2 font-medium">人数</th>
+                  <th className="text-left py-2 font-medium">方式</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-sand-50">
+                {todayBookings.map((b, i) => (
+                  <tr key={i} className="text-charcoal">
+                    <td className="py-2">{b.start_time}–{b.end_time}</td>
+                    <td className="py-2 font-medium">{b.assigned_table_code}</td>
+                    <td className="py-2">{b.party_size} 人</td>
+                    <td className="py-2 text-charcoal-light">{b.booking_mode === 'shared_partial_table' ? '拼桌' : '整桌'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Recent bookings */}
+      {/* 最近预约 */}
       <div className="card">
         <div className="flex items-center justify-between p-5 border-b border-sand-100">
           <h2 className="font-semibold text-charcoal text-sm">最近预约</h2>
@@ -161,34 +148,31 @@ export default async function DashboardPage() {
               <tr className="bg-warm-50 text-xs text-charcoal-light">
                 <th className="text-left px-5 py-3 font-medium">姓名</th>
                 <th className="text-left px-5 py-3 font-medium hidden sm:table-cell">日期 · 时段</th>
+                <th className="text-left px-5 py-3 font-medium hidden md:table-cell">桌位</th>
                 <th className="text-left px-5 py-3 font-medium">人数</th>
                 <th className="text-left px-5 py-3 font-medium">状态</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-sand-100">
               {(recent ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-charcoal-light text-sm">暂无预约记录</td>
-                </tr>
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-charcoal-light text-sm">暂无预约记录</td></tr>
               )}
               {(recent ?? []).map(b => {
-                const st   = statusLabel[b.status] ?? { label: b.status, cls: '' }
-                const slot = (b.slot_templates as unknown) as { date: string; start_time: string; end_time: string; label: string } | null
+                const st = statusLabel[b.status] ?? { label: b.status, cls: '' }
                 return (
-                  <tr key={b.id} className="hover:bg-warm-50 transition-colors">
+                  <tr key={b.booking_id} className="hover:bg-warm-50 transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="font-medium text-charcoal">{b.customer_name}</div>
-                      <div className="text-xs text-charcoal-light">
-                        {b.contact_type === 'wechat' ? '微信' : '手机'}: {b.contact}
-                      </div>
+                      <div className="text-xs text-charcoal-light">{b.phone}</div>
                     </td>
                     <td className="px-5 py-3.5 hidden sm:table-cell text-xs text-charcoal-light">
-                      {slot ? `${slot.date} · ${slot.label} ${slot.start_time}–${slot.end_time}` : '—'}
+                      {b.booking_date} · {b.start_time}–{b.end_time}
+                    </td>
+                    <td className="px-5 py-3.5 hidden md:table-cell text-xs text-charcoal">
+                      {b.assigned_table_code} · {tableTypeLabel[b.assigned_table_type] ?? b.assigned_table_type}
                     </td>
                     <td className="px-5 py-3.5 text-xs text-charcoal">{b.party_size} 人</td>
-                    <td className="px-5 py-3.5">
-                      <span className={st.cls}>{st.label}</span>
-                    </td>
+                    <td className="px-5 py-3.5"><span className={st.cls}>{st.label}</span></td>
                   </tr>
                 )
               })}
