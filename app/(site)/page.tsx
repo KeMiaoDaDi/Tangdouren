@@ -79,7 +79,7 @@ export default async function HomePage() {
         </div>
 
         {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 animate-bounce">
+        <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-1 animate-bounce">
           <span className="text-xs text-charcoal-light/50">向下滚动</span>
           <div className="w-px h-8 bg-gradient-to-b from-charcoal/20 to-transparent" />
         </div>
