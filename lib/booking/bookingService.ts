@@ -41,7 +41,7 @@ export async function createBooking(
   req:     CreateBookingRequest,
   supabase: SupabaseClient,
 ): Promise<CreateBookingResponse> {
-  const { date, partySize, acceptsSharing, startTime, durationMinutes, customerName, phone, remark } = req
+  const { date, partySize, acceptsSharing, startTime, durationMinutes, customerName, email, remark } = req
 
   // 1. 基础参数校验
   const startMin = timeToMinutes(startTime)
@@ -97,7 +97,7 @@ export async function createBooking(
     .insert({
       booking_date:               date,
       customer_name:              customerName,
-      phone,
+      email,
       party_size:                 partySize,
       accepts_sharing:            acceptsSharing,
       start_time:                 startTime,

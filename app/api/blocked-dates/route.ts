@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 // GET /api/blocked-dates?year=2026&month=3
+// 公开接口：用 admin client 确保 RLS 不阻断读取
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const year  = searchParams.get('year')
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
   const to   = `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`
 
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()          // admin 绕过 RLS，公开可读
     const { data, error } = await supabase
       .from('blocked_dates')
       .select('date, reason')

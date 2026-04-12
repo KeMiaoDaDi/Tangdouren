@@ -1,23 +1,28 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Star, Clock, Users, MapPin, ChevronRight } from 'lucide-react'
+import { createAdminClient } from '@/lib/supabase/admin'
+import PixelBeadTitle from '@/components/site/PixelBeadTitle'
 
-// ─── Mock gallery data ───────────────────────────────────────────────────────
-const featuredWorks = [
-  { id: 1, title: '彩虹独角兽', category: '动物系列', src: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=400&fit=crop', span: 'col-span-2 row-span-2' },
-  { id: 2, title: '星空风景',   category: '风景系列', src: 'https://images.unsplash.com/photo-1470770903676-69b98201ea1c?w=400&h=400&fit=crop', span: '' },
-  { id: 3, title: '可爱柴犬',   category: '宠物定制', src: 'https://images.unsplash.com/photo-1611003229636-9f9128dbb445?w=400&h=400&fit=crop', span: '' },
-  { id: 4, title: '草莓蛋糕',   category: '美食系列', src: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400&h=400&fit=crop', span: '' },
-  { id: 5, title: '日式庭院',   category: '风景系列', src: 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=400&h=400&fit=crop', span: '' },
-]
+export const revalidate = 60
 
 const reviews = [
-  { name: '小雨', lang: '🇨🇳', rating: 5, text: '超级开心的体验！老师很有耐心，作品完成后真的很有成就感，强烈推荐给朋友们！' },
+  { name: '小薇', lang: '🇨🇳', rating: 5, text: '超级开心的体验！店员很有耐心，作品完成后真的很有成就感，强烈推荐给朋友们！' },
   { name: 'Amy', lang: '🇬🇧', rating: 5, text: 'Made a cute Shiba Inu with my girlfriend. The studio is cozy and the teacher is wonderful!' },
-  { name: '晓彤', lang: '🇨🇳', rating: 5, text: '给自己的猫咪做了一幅定制肖像，简直太可爱了！工作室环境温馨，下次还要来！' },
+  { name: '小张', lang: '🇨🇳', rating: 5, text: '给家里猫猫定制了一幅拼豆，可爱爆了！工作室很干净温馨，下次还要来！' },
 ]
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('gallery_items')
+    .select('id, storage_path, alt_text, category')
+    .eq('category', '展示图库')
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(4)
+  const featuredWorks = data ?? []
+
   return (
     <div className="overflow-x-hidden">
 
@@ -46,24 +51,20 @@ export default function HomePage() {
         </div>
 
         <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-32 text-center">
-          <div className="animate-fade-in">
-            <span className="inline-block mb-4 rounded-full bg-terracotta/10 px-4 py-1.5 text-sm font-medium text-terracotta border border-terracotta/20">
+          <div className="animate-fade-in flex justify-center mb-10">
+            <span className="inline-block rounded-full bg-terracotta/10 px-4 py-1.5 text-sm font-medium text-terracotta border border-terracotta/20">
               伦敦拼豆手作体验工作室
             </span>
           </div>
 
-          <h1 className="animate-slide-up font-display text-5xl font-bold text-charcoal leading-tight mt-4 sm:text-6xl lg:text-7xl"
-              style={{ animationDelay: '0.1s' }}>
-            于遥 James，<br />
-            <span className="text-terracotta">是Gay</span>
-          </h1>
+          <PixelBeadTitle />
 
           <p className="animate-slide-up mt-6 text-lg text-charcoal-light max-w-lg mx-auto leading-relaxed"
              style={{ animationDelay: '0.2s' }}>
-            不来的是gay，来了也是gay。
+            我来伦敦只办三件事：拼豆，拼豆，还是拼豆！
           </p>
 
-          <div className="animate-slide-up mt-10 flex flex-wrap items-center justify-center gap-4"
+          <div className="animate-slide-up mt-16 flex flex-wrap items-center justify-center gap-4"
                style={{ animationDelay: '0.3s' }}>
             <Link href="/booking" className="btn-primary text-base px-8 py-3.5">
               立即预约体验
@@ -72,21 +73,6 @@ export default function HomePage() {
             <Link href="/gallery" className="btn-secondary text-base px-8 py-3.5">
               查看作品展示
             </Link>
-          </div>
-
-          {/* Stats */}
-          <div className="animate-slide-up mt-16 grid grid-cols-3 gap-4 max-w-sm mx-auto"
-               style={{ animationDelay: '0.4s' }}>
-            {[
-              { label: '完成作品', value: '500+' },
-              { label: '好评率',   value: '98%' },
-              { label: '每周开放', value: '6场' },
-            ].map(({ label, value }) => (
-              <div key={label} className="text-center">
-                <div className="font-display text-2xl font-bold text-terracotta">{value}</div>
-                <div className="text-xs text-charcoal-light mt-0.5">{label}</div>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -98,54 +84,42 @@ export default function HomePage() {
       </section>
 
       {/* ── Featured Gallery ─────────────────────────────────────────── */}
-      <section className="py-20 bg-white">
+      <section className="py-28 bg-white">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
+          <div className="text-center mb-16">
             <span className="text-terracotta text-sm font-medium tracking-wider uppercase">作品展示</span>
-            <h2 className="section-title mt-2">每一颗豆都有温度</h2>
-            <p className="section-subtitle mt-3 max-w-md mx-auto">
-              学员们的精彩创作，每件都是独一无二的存在
-            </p>
+            <h2 className="section-title mt-2">以下拼豆我将给到<span className="text-terracotta font-bold">夯</span></h2>
           </div>
 
-          {/* Mobile: 2-column uniform grid / Desktop: mosaic grid */}
-          <div className="grid grid-cols-2 gap-3 sm:hidden">
-            {featuredWorks.map((work) => (
-              <div key={work.id} className="relative aspect-square overflow-hidden rounded-2xl group cursor-pointer">
-                <Image
-                  src={work.src} alt={work.title} fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  sizes="50vw"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="absolute bottom-0 left-0 p-2.5 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                  <p className="text-white text-xs font-semibold">{work.title}</p>
+          {featuredWorks.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
+              {featuredWorks.map((work) => (
+                <div key={work.id} className="relative aspect-square overflow-hidden rounded-2xl group cursor-pointer">
+                  <Image
+                    src={work.storage_path}
+                    alt={work.alt_text ?? work.category}
+                    fill
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    sizes="(max-width: 640px) 50vw, 25vw"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  {work.alt_text && (
+                    <div className="absolute bottom-0 left-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                      <p className="text-white text-sm font-semibold">{work.alt_text}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-warm-50 py-20 text-center text-charcoal-light">
+              <div className="text-5xl mb-4">🫘</div>
+              <p className="text-base font-medium text-charcoal">作品展示即将上线</p>
+              <p className="text-sm mt-2 text-charcoal-light">敬请期待</p>
+            </div>
+          )}
 
-          <div className="hidden sm:grid grid-cols-3 grid-rows-2 gap-3 h-[600px]">
-            {featuredWorks.map((work) => (
-              <div
-                key={work.id}
-                className={`${work.span || ''} relative overflow-hidden rounded-2xl group cursor-pointer`}
-              >
-                <Image
-                  src={work.src} alt={work.title} fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  sizes="33vw"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="absolute bottom-0 left-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                  <p className="text-white text-sm font-semibold">{work.title}</p>
-                  <p className="text-white/70 text-xs">{work.category}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center mt-8">
+          <div className="text-center mt-10">
             <Link href="/gallery" className="btn-ghost text-terracotta hover:text-terracotta-dark hover:bg-terracotta/5">
               查看全部作品
               <ChevronRight size={16} />
@@ -155,14 +129,14 @@ export default function HomePage() {
       </section>
 
       {/* ── How It Works ─────────────────────────────────────────────── */}
-      <section className="py-20 bg-white">
+      <section className="py-28 bg-warm-50">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
+          <div className="text-center mb-16">
             <span className="text-terracotta text-sm font-medium tracking-wider uppercase">预约流程</span>
             <h2 className="section-title mt-2">三步开启你的拼豆之旅</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
             {/* Connector line */}
             <div className="hidden md:block absolute top-8 left-1/3 right-1/3 h-px bg-gradient-to-r from-sand-200 via-terracotta/30 to-sand-200" />
 
@@ -171,8 +145,8 @@ export default function HomePage() {
               { step: '02', emoji: '📝', title: '填写预约信息', desc: '告诉我们你的姓名、联系方式和参与人数' },
               { step: '03', emoji: '🎉', title: '到店开始创作', desc: '收到确认后，带着好心情来工作室，一起动手创作！' },
             ].map(({ step, emoji, title, desc }) => (
-              <div key={step} className="relative text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-terracotta/10 text-2xl">
+              <div key={step} className="relative text-center px-4">
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-terracotta/10 text-3xl">
                   {emoji}
                 </div>
                 <span className="absolute top-0 right-1/4 text-xs font-bold text-terracotta/30 font-display">{step}</span>
@@ -182,7 +156,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div className="text-center mt-12">
+          <div className="text-center mt-16">
             <Link href="/booking" className="btn-primary text-base px-10 py-3.5">
               马上预约
               <ArrowRight size={18} />
@@ -192,22 +166,22 @@ export default function HomePage() {
       </section>
 
       {/* ── Reviews ──────────────────────────────────────────────────── */}
-      <section className="py-20 bg-gradient-to-br from-sand-100 to-cream">
+      <section className="py-28 bg-gradient-to-br from-sand-100 to-cream">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <span className="text-terracotta text-sm font-medium tracking-wider uppercase">学员反馈</span>
+          <div className="text-center mb-16">
+            <span className="text-terracotta text-sm font-medium tracking-wider uppercase">客户反馈</span>
             <h2 className="section-title mt-2">他们说</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {reviews.map((review, i) => (
-              <div key={i} className="card p-6">
-                <div className="flex items-center gap-1 mb-3">
+              <div key={i} className="card p-8">
+                <div className="flex items-center gap-1 mb-4">
                   {Array.from({ length: review.rating }).map((_, j) => (
-                    <Star key={j} size={14} className="fill-terracotta text-terracotta" />
+                    <Star key={j} size={15} className="fill-terracotta text-terracotta" />
                   ))}
                 </div>
-                <p className="text-sm text-charcoal-light leading-relaxed mb-4">"{review.text}"</p>
+                <p className="text-sm text-charcoal-light leading-relaxed mb-6">"{review.text}"</p>
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-terracotta to-terracotta-dark flex items-center justify-center text-white text-xs font-semibold">
                     {review.name[0]}
@@ -222,22 +196,22 @@ export default function HomePage() {
       </section>
 
       {/* ── Location ─────────────────────────────────────────────────── */}
-      <section className="py-20 bg-white">
+      <section className="py-28 bg-white">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
               <span className="text-terracotta text-sm font-medium tracking-wider uppercase">找到我们</span>
-              <h2 className="section-title mt-2 mb-4">来伦敦看看我们</h2>
+              <h2 className="section-title mt-2 mb-4">快来找我们玩吧！</h2>
               <p className="section-subtitle mb-6">
-                工作室位于伦敦东区 Whitechapel，交通便利，步行即可到达地铁站。
+                工作室位于伦敦东区 Algate East，交通便利，步行即可到达地铁站。
                 工作时间为英国本地时间（GMT/BST）。
               </p>
 
               <ul className="space-y-4">
                 {[
                   { icon: MapPin,  label: '地址', value: 'Unit 226, 65-75 Whitechapel Road, London E1 1DU' },
-                  { icon: Clock,   label: '营业时间', value: '周三至周日 10:00 – 18:00 (GMT/BST)' },
-                  { icon: Users,   label: '每场人数', value: '最多 4 人，温馨小班' },
+                  { icon: Clock,   label: '营业时间', value: '周二至周日 11:00 – 21:00 (GMT/BST)' },
+                  { icon: Users,   label: '预定人数', value: '1 - 4 人自由选择' },
                 ].map(({ icon: Icon, label, value }) => (
                   <li key={label} className="flex items-start gap-3">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-terracotta/10">
@@ -261,9 +235,9 @@ export default function HomePage() {
             <div className="relative h-72 lg:h-96 rounded-2xl overflow-hidden bg-gradient-to-br from-sand-100 to-warm-200 flex items-center justify-center">
               <div className="text-center px-6">
                 <div className="text-6xl mb-3">📍</div>
-                <p className="font-semibold text-charcoal">Unit 226</p>
-                <p className="text-charcoal-light text-sm mt-1">65-75 Whitechapel Road</p>
-                <p className="text-charcoal-light text-sm">London E1 1DU</p>
+                <p className="font-semibold text-charcoal">Google Map 搜索：</p>
+                <p className="text-charcoal text-lg font-bold mt-2">糖豆人手作</p>
+                <p className="text-xl mt-1 text-red-500">❤</p>
                 <a
                   href="https://maps.google.com/?q=65-75+Whitechapel+Road+London+E1+1DU"
                   target="_blank"
@@ -280,7 +254,7 @@ export default function HomePage() {
       </section>
 
       {/* ── CTA Banner ───────────────────────────────────────────────── */}
-      <section className="py-20 bg-gradient-to-r from-terracotta to-terracotta-dark text-white relative overflow-hidden">
+      <section className="py-28 bg-gradient-to-r from-terracotta to-terracotta-dark text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           {Array.from({ length: 20 }).map((_, i) => (
             <span key={i} className="absolute text-4xl select-none" style={{ left: `${(i * 5.3) % 100}%`, top: `${(i * 7.1) % 100}%` }}>

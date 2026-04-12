@@ -6,7 +6,7 @@ import {
   AlertCircle, BookOpen, Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { AvailabilityResult, AvailabilityOption } from '@/lib/booking/types'
+import type { AvailabilityResult } from '@/lib/booking/types'
 import { BUSINESS_CONFIG } from '@/lib/booking/config'
 
 // ── 伦敦时间工具 ──────────────────────────────────────────────────────────────
@@ -47,6 +47,17 @@ export default function BookingPage() {
   const today                = useMemo(() => todayLondon(), [])
   const { year: iy, month: im } = useMemo(() => getLondonYM(), [])
 
+  // 今天是否已过营业结束时间（伦敦时间 ≥ 21:00），若是则今日日历格灰色
+  const isTodayClosed = useMemo(() => {
+    const [closeH, closeM] = BUSINESS_CONFIG.closeTime.split(':').map(Number)
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date())
+    const nowH = parseInt(parts.find(p => p.type === 'hour')!.value)
+    const nowM = parseInt(parts.find(p => p.type === 'minute')!.value)
+    return nowH * 60 + nowM >= closeH * 60 + closeM
+  }, [])
+
   // 步骤状态
   const [step, setStep] = useState<Step>('date')
 
@@ -61,9 +72,8 @@ export default function BookingPage() {
   const [partySize, setPartySize]         = useState<number>(1)
   const [acceptsSharing, setSharing]      = useState(false)
 
-  // 可选筛选
-  const [filterTime, setFilterTime]         = useState<string | null>(null)
-  const [filterDuration, setFilterDuration] = useState<number | null>(null)
+  // 已选开始时间（Step 3 第一阶段）
+  const [pickedTime, setPickedTime] = useState<string | null>(null)
 
   // 可用时段
   const [availability, setAvailability]   = useState<AvailabilityResult[]>([])
@@ -76,7 +86,7 @@ export default function BookingPage() {
   } | null>(null)
 
   // 表单
-  const [form, setForm]         = useState({ name: '', phone: '', remark: '' })
+  const [form, setForm]         = useState({ name: '', email: '', remark: '' })
   const [formErrors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -97,10 +107,12 @@ export default function BookingPage() {
   useEffect(() => { fetchBlocked(year, month) }, [year, month, fetchBlocked])
 
   // ── 可用时段加载 ──────────────────────────────────────────────────────────
+  // 始终拉完整数据，筛选在前端完成（避免筛选后芯片消失无法切换）
   const fetchAvailability = useCallback(async () => {
     if (!selectedDate) return
     setLoadingSlots(true)
     setSlotsError('')
+    setPickedTime(null)
     setSelectedOption(null)
     try {
       const params = new URLSearchParams({
@@ -108,15 +120,13 @@ export default function BookingPage() {
         partySize:      String(partySize),
         acceptsSharing: String(acceptsSharing),
       })
-      if (filterTime)     params.set('startTime', filterTime)
-      if (filterDuration) params.set('durationMinutes', String(filterDuration))
       const res  = await fetch(`/api/availability?${params}`)
       const data = await res.json()
       setAvailability(data.results ?? [])
     } catch {
       setSlotsError('加载失败，请重试')
     } finally { setLoadingSlots(false) }
-  }, [selectedDate, partySize, acceptsSharing, filterTime, filterDuration])
+  }, [selectedDate, partySize, acceptsSharing])
 
   useEffect(() => {
     if (step === 'slots') fetchAvailability()
@@ -133,48 +143,35 @@ export default function BookingPage() {
   }
   function isPast(day: number)    { return dateKey(year, month, day) < today }
   function isBlocked(day: number) { return blockedDates.includes(dateKey(year, month, day)) }
-
-  // ── 时长格式化 ────────────────────────────────────────────────────────────
-  function fmtDuration(min: number) {
-    const h = min / 60
-    return h === Math.floor(h) ? `${h}小时` : `${h}小时`
+  function isClosedToday(day: number) {
+    return isTodayClosed && dateKey(year, month, day) === today
   }
 
-  // ── 所有可选时长列表（从配置生成） ───────────────────────────────────────
-  const allDurations = useMemo(() => {
-    const { minDurationMinutes: min, maxDurationMinutes: max, durationStepMinutes: step } = BUSINESS_CONFIG
-    const list: number[] = []
-    for (let d = min; d <= max; d += step) list.push(d)
-    return list
-  }, [])
+  // ── 时长格式化（60→1小时，90→1.5小时，…） ───────────────────────────────
+  function fmtDuration(min: number) {
+    return `${min / 60}小时`
+  }
 
   // ── 所有出现的开始时间（从结果中提取） ───────────────────────────────────
-  const allStartTimes = useMemo(() => {
-    return [...new Set(availability.map(r => r.startTime))].sort()
-  }, [availability])
+  const allStartTimes = useMemo(() =>
+    [...new Set(availability.map(r => r.startTime))].sort(),
+  [availability])
 
-  // ── 过滤后的结果 ──────────────────────────────────────────────────────────
-  const filteredResults = useMemo(() => {
-    return availability.filter(r => {
-      if (filterTime && r.startTime !== filterTime) return false
-      if (filterDuration) {
-        const hasMatch = r.options.some(o => o.durationMinutes === filterDuration)
-        return hasMatch
-      }
-      return true
-    }).map(r => ({
-      ...r,
-      options: filterDuration
-        ? r.options.filter(o => o.durationMinutes === filterDuration)
-        : r.options,
-    }))
-  }, [availability, filterTime, filterDuration])
+  // ── 当前已选时间的时长选项 ────────────────────────────────────────────────
+  const timeOptions = useMemo(() => {
+    if (!pickedTime) return []
+    return availability.find(r => r.startTime === pickedTime)?.options ?? []
+  }, [availability, pickedTime])
 
   // ── 表单校验 ──────────────────────────────────────────────────────────────
   function validate() {
     const e: Record<string, string> = {}
     if (!form.name.trim())  e.name  = '请输入姓名'
-    if (!form.phone.trim()) e.phone = '请输入手机号'
+    if (!form.email.trim()) {
+      e.email = '请输入邮箱地址'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      e.email = '请输入有效的邮箱格式，如 example@mail.com'
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -196,7 +193,7 @@ export default function BookingPage() {
           startTime:       selectedOption.startTime,
           durationMinutes: selectedOption.durationMinutes,
           customerName:    form.name,
-          phone:           form.phone,
+          email:           form.email,
           remark:          form.remark || undefined,
         }),
       })
@@ -211,9 +208,9 @@ export default function BookingPage() {
 
   function resetAll() {
     setStep('date'); setDate(null); setPartySize(1); setSharing(false)
-    setFilterTime(null); setFilterDuration(null); setAvailability([])
+    setPickedTime(null); setAvailability([])
     setSelectedOption(null)
-    setForm({ name: '', phone: '', remark: '' })
+    setForm({ name: '', email: '', remark: '' })
     setErrors({}); setSubmitError(''); setBookingResult(null)
   }
 
@@ -293,26 +290,28 @@ export default function BookingPage() {
               {Array.from({ length: getDays(year, month) }).map((_, i) => {
                 const day     = i + 1
                 const key     = dateKey(year, month, day)
-                const past    = isPast(day)
-                const blocked = isBlocked(day)
-                const sel     = selectedDate === key
-                const isToday = key === today
-                const disabled = past || blocked
+                const past        = isPast(day)
+                const blocked     = isBlocked(day)
+                const closedToday = isClosedToday(day)
+                const sel         = selectedDate === key
+                const isToday     = key === today
+                const disabled    = past || blocked || closedToday
+                const dimmed      = past || blocked || closedToday
 
                 return (
                   <button key={day} disabled={disabled} onClick={() => setDate(key)}
                     className={cn(
                       'relative aspect-square rounded-xl text-sm font-medium transition-all duration-200',
-                      sel             ? 'bg-terracotta text-white shadow-warm scale-105' :
-                      past || blocked ? 'text-charcoal-light/25 cursor-not-allowed' :
-                                        'bg-warm-100 text-charcoal hover:bg-sand-200 hover:scale-105'
+                      sel    ? 'bg-terracotta text-white shadow-warm scale-105' :
+                      dimmed ? 'text-charcoal-light/25 cursor-not-allowed' :
+                               'bg-warm-100 text-charcoal hover:bg-sand-200 hover:scale-105'
                     )}
                   >
                     {day}
-                    {isToday && !sel && !past && (
+                    {isToday && !sel && !dimmed && (
                       <span className="absolute top-0.5 right-1 text-[8px] text-terracotta font-bold leading-none">今</span>
                     )}
-                    {!sel && !past && !blocked && (
+                    {!sel && !dimmed && (
                       <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-terracotta/50" />
                     )}
                   </button>
@@ -409,7 +408,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* ── STEP 3: 可用时段（按钮式） ───────────────────────────────────── */}
+        {/* ── STEP 3: 可用时段（两阶段点选） ─────────────────────────────── */}
         {step === 'slots' && (
           <div className="animate-fade-in">
             <button onClick={() => setStep('party')} className="btn-ghost mb-4 text-sm">
@@ -420,99 +419,111 @@ export default function BookingPage() {
                 <h2 className="font-display text-xl font-semibold text-charcoal">选择时段</h2>
                 <button onClick={fetchAvailability} className="text-xs text-charcoal-light hover:text-terracotta">刷新</button>
               </div>
-              <p className="text-sm text-charcoal-light mb-5">
+              <p className="text-sm text-charcoal-light mb-6">
                 {selectedDate} · {partySize === 3 ? '3-4人' : `${partySize}人`}
                 {acceptsSharing && ' · 接受拼桌'}
               </p>
 
-              {/* 可选筛选器 */}
-              {!loadingSlots && availability.length > 0 && (
-                <div className="mb-5 space-y-2">
-                  {/* 时间筛选 */}
-                  {allStartTimes.length > 1 && (
-                    <div>
-                      <p className="text-xs text-charcoal-light mb-1.5">按开始时间筛选（可选）</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button onClick={() => setFilterTime(null)}
-                          className={cn('rounded-full border px-2.5 py-1 text-xs transition-all',
-                            !filterTime ? 'border-terracotta bg-terracotta/10 text-terracotta font-medium' : 'border-sand-200 text-charcoal-light hover:border-terracotta/40'
-                          )}>全部</button>
-                        {allStartTimes.map(t => (
-                          <button key={t} onClick={() => setFilterTime(filterTime === t ? null : t)}
-                            className={cn('rounded-full border px-2.5 py-1 text-xs transition-all',
-                              filterTime === t ? 'border-terracotta bg-terracotta/10 text-terracotta font-medium' : 'border-sand-200 text-charcoal-light hover:border-terracotta/40'
-                            )}>{t}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {/* 时长筛选 */}
-                  <div>
-                    <p className="text-xs text-charcoal-light mb-1.5">按时长筛选（可选）</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button onClick={() => setFilterDuration(null)}
-                        className={cn('rounded-full border px-2.5 py-1 text-xs transition-all',
-                          !filterDuration ? 'border-terracotta bg-terracotta/10 text-terracotta font-medium' : 'border-sand-200 text-charcoal-light hover:border-terracotta/40'
-                        )}>全部</button>
-                      {allDurations.map(d => (
-                        <button key={d} onClick={() => setFilterDuration(filterDuration === d ? null : d)}
-                          className={cn('rounded-full border px-2.5 py-1 text-xs transition-all',
-                            filterDuration === d ? 'border-terracotta bg-terracotta/10 text-terracotta font-medium' : 'border-sand-200 text-charcoal-light hover:border-terracotta/40'
-                          )}>{fmtDuration(d)}</button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 时段结果 */}
               {loadingSlots ? (
                 <div className="py-10 text-center text-sm text-charcoal-light animate-pulse">加载可用时段中…</div>
               ) : slotsError ? (
                 <div className="py-8 text-center text-sm text-red-500">{slotsError}</div>
-              ) : filteredResults.length === 0 ? (
+              ) : allStartTimes.length === 0 ? (
                 <div className="text-center py-10 text-charcoal-light">
                   <AlertCircle className="mx-auto mb-2 text-sand-300" size={32} />
                   <p className="text-sm">该日期暂无可约时段</p>
-                  <p className="text-xs mt-1 text-charcoal-light/60">请尝试换个日期，或关闭拼桌限制</p>
+                  <p className="text-xs mt-1 text-charcoal-light/60">请尝试换个日期，或开启拼桌选项</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {filteredResults.map((row: AvailabilityResult) => (
-                    <div key={row.startTime} className="flex gap-3 items-start">
-                      {/* 时间标签 */}
-                      <div className="shrink-0 w-14 text-right">
-                        <span className="font-mono font-semibold text-charcoal text-sm">{row.startTime}</span>
-                      </div>
-                      {/* 选项按钮组 */}
-                      <div className="flex flex-wrap gap-2">
-                        {row.options.map((opt: AvailabilityOption) => {
-                          const key = `${row.startTime}_${opt.durationMinutes}_${opt.isSharedOption}`
-                          const sel = selectedOption?.startTime === row.startTime
+                <>
+                  {/* ── 第一阶段：选开始时间 ── */}
+                  <div className="mb-2">
+                    <p className="text-xs font-medium text-charcoal-light mb-3 tracking-wide">① 选择开始时间</p>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                      {allStartTimes.map(t => {
+                        const hasSharing = availability.find(r => r.startTime === t)?.options.some(o => o.isSharedOption)
+                        return (
+                          <button
+                            key={t}
+                            onClick={() => { setPickedTime(t); setSelectedOption(null) }}
+                            className={cn(
+                              'relative rounded-xl border-2 py-2.5 text-sm font-semibold text-center transition-all duration-200',
+                              pickedTime === t
+                                ? 'border-terracotta bg-terracotta text-white shadow-warm'
+                                : 'border-sand-200 bg-warm-50 text-charcoal hover:border-terracotta/50 hover:bg-terracotta/5'
+                            )}
+                          >
+                            {t}
+                            {hasSharing && pickedTime !== t && (
+                              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-sage border border-white" />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {acceptsSharing && allStartTimes.some(t =>
+                      availability.find(r => r.startTime === t)?.options.some(o => o.isSharedOption)
+                    ) && (
+                      <p className="mt-2 text-[11px] text-charcoal-light/60 flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-sage" />
+                        绿点表示该时段有拼桌选项
+                      </p>
+                    )}
+                  </div>
+
+                  {/* ── 第二阶段：选时长（选完时间才展开） ── */}
+                  {pickedTime && (
+                    <div className="mt-5 pt-5 border-t border-sand-100">
+                      <p className="text-xs font-medium text-charcoal-light mb-3 tracking-wide">
+                        ② {pickedTime} 开始，选择时长
+                      </p>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {timeOptions.map(opt => {
+                          const key = `${pickedTime}_${opt.durationMinutes}_${opt.isSharedOption}`
+                          const sel = selectedOption?.startTime === pickedTime
                             && selectedOption.durationMinutes === opt.durationMinutes
                             && selectedOption.displayTag === opt.displayTag
                           return (
-                            <button key={key}
-                              onClick={() => setSelectedOption({ startTime: row.startTime, durationMinutes: opt.durationMinutes, displayTag: opt.displayTag })}
+                            <button
+                              key={key}
+                              onClick={() => setSelectedOption(sel ? null : {
+                                startTime: pickedTime,
+                                durationMinutes: opt.durationMinutes,
+                                displayTag: opt.displayTag,
+                              })}
                               className={cn(
-                                'rounded-xl border-2 px-3 py-1.5 text-xs font-medium transition-all',
+                                'rounded-2xl border-2 p-3 text-center transition-all duration-200',
                                 sel
-                                  ? 'border-terracotta bg-terracotta text-white shadow-warm scale-105'
+                                  ? 'border-terracotta bg-terracotta/5 shadow-warm scale-[1.02]'
                                   : opt.isSharedOption
-                                    ? 'border-sage/60 bg-sage/5 text-sage-dark hover:border-sage hover:bg-sage/10'
-                                    : 'border-sand-200 bg-warm-50 text-charcoal hover:border-terracotta/50 hover:bg-terracotta/5'
+                                    ? 'border-sage/50 bg-sage/5 hover:border-sage hover:bg-sage/10'
+                                    : 'border-sand-200 bg-warm-50 hover:border-terracotta/40 hover:bg-terracotta/5'
                               )}
                             >
-                              {fmtDuration(opt.durationMinutes)}｜{opt.displayTag}
+                              <div className={cn(
+                                'text-base font-bold leading-tight',
+                                sel ? 'text-terracotta' : 'text-charcoal'
+                              )}>
+                                {fmtDuration(opt.durationMinutes)}
+                              </div>
+                              <div className={cn(
+                                'text-[11px] mt-1 leading-snug',
+                                sel ? 'text-terracotta/70'
+                                    : opt.isSharedOption ? 'text-sage-dark'
+                                    : 'text-charcoal-light'
+                              )}>
+                                {opt.displayTag}
+                              </div>
                             </button>
                           )
                         })}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
 
+              {/* 已选摘要 */}
               {selectedOption && (
                 <div className="mt-5 rounded-2xl bg-terracotta/5 border border-terracotta/20 px-4 py-3 text-sm flex items-center gap-2">
                   <Clock size={14} className="text-terracotta shrink-0" />
@@ -559,14 +570,14 @@ export default function BookingPage() {
                   </div>
 
                   <div>
-                    <label className="label" htmlFor="phone">手机号 *</label>
-                    <input id="phone" type="tel"
-                      className={cn('input-field', formErrors.phone && 'border-red-400 focus:ring-red-200')}
-                      placeholder="请输入手机号（英国/国内均可）"
-                      value={form.phone}
-                      onChange={e => setForm({ ...form, phone: e.target.value })}
+                    <label className="label" htmlFor="email">邮箱 *</label>
+                    <input id="email" type="email"
+                      className={cn('input-field', formErrors.email && 'border-red-400 focus:ring-red-200')}
+                      placeholder="请输入邮箱地址，如 example@mail.com"
+                      value={form.email}
+                      onChange={e => setForm({ ...form, email: e.target.value })}
                     />
-                    {formErrors.phone && <p className="mt-1 text-xs text-red-500">{formErrors.phone}</p>}
+                    {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
                   </div>
 
                   <div>
@@ -621,7 +632,7 @@ export default function BookingPage() {
               <p className="text-charcoal-light">⏰ {selectedOption.startTime} – {bookingResult.endTime}</p>
               <p className="text-charcoal-light">🪑 {selectedOption.displayTag} · {bookingResult.assignedTableCode}</p>
               <p className="text-charcoal-light">👤 {form.name} · {partySize === 3 ? '3-4' : partySize} 人</p>
-              <p className="text-charcoal-light">📞 {form.phone}</p>
+              <p className="text-charcoal-light">✉️ {form.email}</p>
             </div>
 
             <button onClick={resetAll} className="btn-secondary">再次预约</button>

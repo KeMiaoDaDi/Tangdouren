@@ -17,7 +17,7 @@ const BookingSchema = z.object({
     .max(cfg.maxDurationMinutes)
     .refine(d => (d - cfg.minDurationMinutes) % cfg.durationStepMinutes === 0, '时长必须按30分钟递增'),
   customerName:    z.string().min(1, '请填写姓名').max(50),
-  phone:           z.string().min(1, '请填写手机号').max(30),
+  email:           z.string().email('请输入有效的邮箱地址').max(100),
   remark:          z.string().max(500).optional(),
 })
 
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     let query = adminSb
       .from('bookings')
       .select(`
-        booking_id, booking_date, customer_name, phone,
+        booking_id, booking_date, customer_name, email,
         party_size, accepts_sharing, start_time, end_time,
         assigned_table_code, assigned_table_type,
         booking_mode, seat_group_type,

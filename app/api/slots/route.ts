@@ -35,23 +35,25 @@ export async function GET(request: NextRequest) {
 
     if (slotsErr) throw slotsErr
 
-    // 2. 获取该月所有未取消的预约（用 admin 客户端绕过 RLS）
-    const { data: bookings, error: bookingsErr } = await admin
-      .from('bookings')
-      .select('slot_id, party_size')
-      .in('slot_id', (slots ?? []).map(s => s.id))
-      .neq('status', 'cancelled')
-
-    if (bookingsErr) throw bookingsErr
-
-    // 3. 计算每个 slot 的已预约人数
+    // 2. 尝试获取已预约人数（新 bookings 表不含 slot_id，静默降级为 0）
     const bookedMap: Record<string, number> = {}
-    ;(bookings ?? []).forEach(b => {
-      bookedMap[b.slot_id] = (bookedMap[b.slot_id] ?? 0) + b.party_size
-    })
+    if ((slots ?? []).length > 0) {
+      try {
+        const { data: bookings } = await admin
+          .from('bookings')
+          .select('slot_id, party_size')
+          .in('slot_id', (slots ?? []).map(s => s.id))
+          .neq('status', 'cancelled')
+        ;(bookings ?? []).forEach((b: { slot_id: string; party_size: number }) => {
+          bookedMap[b.slot_id] = (bookedMap[b.slot_id] ?? 0) + b.party_size
+        })
+      } catch {
+        // 新版 bookings 表已无 slot_id 字段，忽略错误，预约数显示为 0
+      }
+    }
 
-    // 4. 获取封禁日期
-    const { data: blocked } = await supabase
+    // 3. 获取封禁日期（用 admin client 确保不受 RLS 影响）
+    const { data: blocked } = await admin
       .from('blocked_dates')
       .select('date')
       .gte('date', from)

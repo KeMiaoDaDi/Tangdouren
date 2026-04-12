@@ -78,7 +78,7 @@ export interface CreateBookingRequest {
   startTime:        string
   durationMinutes:  number
   customerName:     string
-  phone:            string
+  email:            string
   remark?:          string
 }
 

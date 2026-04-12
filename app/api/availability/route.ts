@@ -3,6 +3,24 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getAvailability, mapDbRowToExisting } from '@/lib/booking/availabilityService'
 import type { AvailabilityResponse } from '@/lib/booking/types'
 
+/** 伦敦当前时间（分钟数，如 14:30 → 870） */
+function londonNowMinutes(): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    hour:     '2-digit',
+    minute:   '2-digit',
+    hour12:   false,
+  }).formatToParts(new Date())
+  const h = parseInt(parts.find(p => p.type === 'hour')!.value)
+  const m = parseInt(parts.find(p => p.type === 'minute')!.value)
+  return h * 60 + m
+}
+
+/** 伦敦今日日期字符串 "YYYY-MM-DD" */
+function londonToday(): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/London' }).format(new Date())
+}
+
 /**
  * GET /api/availability
  * 查询指定日期、人数下的可预约时段组合
@@ -68,13 +86,22 @@ export async function GET(request: NextRequest) {
 
     const allBookings = (rows ?? []).map(mapDbRowToExisting)
 
-    const results = getAvailability({
+    let results = getAvailability({
       partySize,
       acceptsSharing,
       allBookings,
       startTimeFilter,
       durationFilter,
     })
+
+    // ── 今日：过滤已过去的时段（含 30 分钟缓冲，避免临时预约） ──────────────
+    if (date === londonToday()) {
+      const cutoff = londonNowMinutes() + 30  // 30 分钟后才可预约
+      results = results.filter(r => {
+        const [h, m] = r.startTime.split(':').map(Number)
+        return h * 60 + m > cutoff
+      })
+    }
 
     const resp: AvailabilityResponse = {
       date, partySize, acceptsSharing,

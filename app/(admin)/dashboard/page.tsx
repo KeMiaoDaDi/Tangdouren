@@ -69,7 +69,7 @@ export default async function DashboardPage() {
   // 最近 5 条预约
   const { data: recent } = await supabase
     .from('bookings')
-    .select('booking_id, customer_name, phone, party_size, accepts_sharing, booking_date, start_time, end_time, assigned_table_code, assigned_table_type, status, created_at')
+    .select('booking_id, customer_name, email, party_size, accepts_sharing, booking_date, start_time, end_time, assigned_table_code, assigned_table_type, status, created_at')
     .order('created_at', { ascending: false })
     .limit(5)
 
@@ -163,7 +163,7 @@ export default async function DashboardPage() {
                   <tr key={b.booking_id} className="hover:bg-warm-50 transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="font-medium text-charcoal">{b.customer_name}</div>
-                      <div className="text-xs text-charcoal-light">{b.phone}</div>
+                      <div className="text-xs text-charcoal-light">{b.email}</div>
                     </td>
                     <td className="px-5 py-3.5 hidden sm:table-cell text-xs text-charcoal-light">
                       {b.booking_date} · {b.start_time}–{b.end_time}
