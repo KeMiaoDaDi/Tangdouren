@@ -643,7 +643,7 @@ export default function BookingPage() {
                     <label className="label" htmlFor="name">姓名 *</label>
                     <input id="name"
                       className={cn('input-field', formErrors.name && 'border-red-400 focus:ring-red-200')}
-                      placeholder="请输入您的真实姓名"
+                      placeholder="请填写您预定的姓名"
                       value={form.name}
                       onChange={e => setForm({ ...form, name: e.target.value })}
                     />
