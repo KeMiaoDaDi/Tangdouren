@@ -296,11 +296,12 @@ function ScheduleView() {
     ? TABLE_CODES
     : [tableFilter]
 
-  // 按桌位分组预约（仅该日非取消）
+  // 按桌位分组预约（仅已确认/已完成）
+  const ACTIVE_STATUSES = ['confirmed', 'completed']
   const bookingsByTable: Record<string, Booking[]> = {}
   for (const t of visibleTables) bookingsByTable[t] = []
   for (const b of bookings) {
-    if (b.status === 'cancelled') continue
+    if (!ACTIVE_STATUSES.includes(b.status)) continue
     if (bookingsByTable[b.assigned_table_code]) {
       bookingsByTable[b.assigned_table_code].push(b)
     }
@@ -447,10 +448,10 @@ function ScheduleView() {
           </div>
 
           {/* 当日统计 */}
-          {bookings.filter(b => b.status !== 'cancelled').length > 0 && (
+          {bookings.filter(b => ACTIVE_STATUSES.includes(b.status)).length > 0 && (
             <div className="border-t border-sand-100 px-5 py-3 flex flex-wrap gap-4 text-xs text-charcoal-light bg-warm-50">
-              <span>当日预约：<strong className="text-charcoal">{bookings.filter(b => b.status !== 'cancelled').length}</strong> 单</span>
-              <span>总人数：<strong className="text-charcoal">{bookings.filter(b => b.status !== 'cancelled').reduce((s,b) => s + b.party_size, 0)}</strong> 人</span>
+              <span>当日预约：<strong className="text-charcoal">{bookings.filter(b => ACTIVE_STATUSES.includes(b.status)).length}</strong> 单</span>
+              <span>总人数：<strong className="text-charcoal">{bookings.filter(b => ACTIVE_STATUSES.includes(b.status)).reduce((s,b) => s + b.party_size, 0)}</strong> 人</span>
               <span>已完成：<strong className="text-charcoal">{bookings.filter(b => b.status === 'completed').length}</strong> 单</span>
             </div>
           )}
