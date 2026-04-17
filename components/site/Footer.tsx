@@ -24,7 +24,7 @@ export default function Footer() {
               {[
                 { href: '/', label: '首页' },
                 { href: '/gallery', label: '作品展示' },
-                { href: '/about', label: '关于我们' },
+                { href: '/faq', label: 'FAQs' },
                 { href: '/booking', label: '在线预约' },
               ].map(({ href, label }) => (
                 <li key={href}>
@@ -50,7 +50,9 @@ export default function Footer() {
               </li>
               <li className="flex items-center gap-2">
                 <Mail size={14} className="shrink-0 text-terracotta-light" />
-                <span className="text-white/50">邮箱即将开放</span>
+                <a href="mailto:hello@tangdouren.co.uk" className="hover:text-terracotta-light transition-colors">
+                  hello@tangdouren.co.uk
+                </a>
               </li>
             </ul>
           </div>
