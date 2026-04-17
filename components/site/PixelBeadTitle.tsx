@@ -18,8 +18,8 @@ const LINE_MID = (LINE1_Y + LINE2_Y) / 2
 const STEP    = 8          // 细笔画至少2个采样点，爱/赢等复杂字更清晰
 const R       = 3.2        // R/STEP=0.4，豆间保持清晰间隙
 
-// 缓存版本号：v2 强制清除旧缓存（修复字体未就绪时误采样问题）
-const CACHE_VER = `v2-${W}-${H}-${FS}-${STEP}-${R}-${STRETCH}`
+// 缓存版本号：v3 强制清除旧缓存
+const CACHE_VER = `v3-${W}-${H}-${FS}-${STEP}-${R}-${STRETCH}`
 
 const CHAR_COLORS: string[][] = [
   ['#E85252', '#F07070', '#C43838'],
