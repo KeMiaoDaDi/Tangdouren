@@ -34,8 +34,12 @@ export function calcRefund(
   bookingStart: string,     // "YYYY-MM-DD HH:MM"（伦敦本地时间）
   cancelledAt: Date = new Date(),
 ): RefundDecision {
-  // 把伦敦本地时间转为 UTC 毫秒（粗略处理：直接 parse，误差最多1小时DST，可接受）
-  const startMs = new Date(bookingStart.replace(' ', 'T') + ':00').getTime()
+  // 把伦敦本地时间转为 UTC 毫秒
+  // start_time 来自 Supabase time 列，格式可能是 "HH:MM" 或 "HH:MM:SS"
+  // 统一截取前5位（HH:MM），再拼成合法 ISO 字符串
+  const [datePart, timePart] = bookingStart.split(' ')
+  const timeHHMM = timePart.substring(0, 5)  // "14:00:00" → "14:00"
+  const startMs = new Date(`${datePart}T${timeHHMM}:00`).getTime()
   const cancelMs = cancelledAt.getTime()
   const hoursBeforeStart = (startMs - cancelMs) / (1000 * 60 * 60)
 
