@@ -18,8 +18,8 @@ const LINE_MID = (LINE1_Y + LINE2_Y) / 2
 const STEP    = 8          // 细笔画至少2个采样点，爱/赢等复杂字更清晰
 const R       = 3.2        // R/STEP=0.4，豆间保持清晰间隙
 
-// 缓存版本号：v4 修复字重检测（ZCOOL 只有 400 字重）
-const CACHE_VER = `v4-${W}-${H}-${FS}-${STEP}-${R}-${STRETCH}`
+// 缓存版本号：v5 修复刷新后模糊（字体缓存竞态，加 double-rAF）
+const CACHE_VER = `v5-${W}-${H}-${FS}-${STEP}-${R}-${STRETCH}`
 
 const CHAR_COLORS: string[][] = [
   ['#E85252', '#F07070', '#C43838'],
@@ -87,6 +87,9 @@ export default function PixelBeadTitle() {
 
       // ── 首次：等 ZCOOL 字体就绪再采样 ──
       await waitForZCOOL(FS)
+      // 字体从缓存瞬间加载时，canvas 字体引擎可能还未完成初始化。
+      // 等两帧（double rAF）确保本帧渲染完成后再采样，避免刷新后模糊。
+      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
       const cvs = document.createElement('canvas')
       // 按屏幕 DPI 缩放 canvas，高分屏字体渲染更清晰，采样更准确
