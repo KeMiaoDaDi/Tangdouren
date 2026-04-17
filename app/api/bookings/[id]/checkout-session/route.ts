@@ -81,7 +81,7 @@ export async function POST(
       customer_email: booking.email,
       success_url: `${appUrl}/booking/pay/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${appUrl}/booking/pay/cancelled`,
-      expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // 30 分钟后过期
+      expires_at: Math.floor(Date.now() / 1000) + (parseInt(process.env.BOOKING_PAYMENT_TIMEOUT_MINUTES ?? '5') * 60),
     })
 
     // 5. 回写 checkout_session_id
