@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -35,10 +36,19 @@ export default function NavBar() {
     >
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <span className="text-2xl select-none">"Logo"</span>
-          <span className="font-display text-lg font-semibold text-charcoal group-hover:text-terracotta transition-colors">
-            糖豆人手工工作室
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 shadow-sm">
+            <Image
+              src="/logo.png"
+              alt="糖豆人手工工作室"
+              width={80}
+              height={80}
+              className="h-full w-full object-cover"
+              priority
+            />
+          </div>
+          <span className="font-display text-base font-semibold text-charcoal group-hover:text-terracotta transition-colors leading-tight">
+            糖豆人<br />手工工作室
           </span>
         </Link>
 
