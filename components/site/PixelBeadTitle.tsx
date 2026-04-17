@@ -18,8 +18,8 @@ const LINE_MID = (LINE1_Y + LINE2_Y) / 2
 const STEP    = 8          // 细笔画至少2个采样点，爱/赢等复杂字更清晰
 const R       = 3.2        // R/STEP=0.4，豆间保持清晰间隙
 
-// 缓存版本号：v3 强制清除旧缓存
-const CACHE_VER = `v3-${W}-${H}-${FS}-${STEP}-${R}-${STRETCH}`
+// 缓存版本号：v4 修复字重检测（ZCOOL 只有 400 字重）
+const CACHE_VER = `v4-${W}-${H}-${FS}-${STEP}-${R}-${STRETCH}`
 
 const CHAR_COLORS: string[][] = [
   ['#E85252', '#F07070', '#C43838'],
@@ -36,31 +36,32 @@ interface VB   { x: number; y: number; w: number; h: number }
 // ── 模块级缓存：第一次采样成功后存储，后续导航直接复用，彻底避免字体重载问题 ──
 let _cache: { ver: string; dots: Dot[]; vb: VB } | null = null
 
-// ── 字体就绪检测：优先用 FontFace API，回退到宽度轮询 ──
+// ── 字体就绪检测：ZCOOL QingKe HuangYou 只有单一字重，用 400 检测 ──
 async function waitForZCOOL(fs: number, timeoutMs = 6000): Promise<void> {
-  const fontSpec = `900 ${fs}px 'ZCOOL QingKe HuangYou'`
+  // ZCOOL 字体只有一个字重，必须用 400 检测，否则 fonts.check() 永远返回 false
+  const fontSpec400 = `400 ${fs}px 'ZCOOL QingKe HuangYou'`
 
   // 优先方案：document.fonts.load() 是最可靠的字体加载 API
   if (typeof document !== 'undefined' && 'fonts' in document) {
     try {
       await Promise.race([
-        document.fonts.load(fontSpec),
+        document.fonts.load(fontSpec400),
         new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
       ])
-      if (document.fonts.check(fontSpec)) return
+      if (document.fonts.check(fontSpec400)) return
     } catch { /* 降级到轮询 */ }
   }
 
-  // 回退方案：对比 ZCOOL 与 sans-serif 渲染宽度差
+  // 回退方案：对比 ZCOOL 与 sans-serif 渲染宽度差（不指定字重，用浏览器默认匹配）
   const cvs = document.createElement('canvas')
   cvs.width = 400; cvs.height = 100
   const ctx = cvs.getContext('2d')!
   const deadline = Date.now() + timeoutMs
 
   while (Date.now() < deadline) {
-    ctx.font = `900 ${fs}px 'ZCOOL QingKe HuangYou', sans-serif`
+    ctx.font = `${fs}px 'ZCOOL QingKe HuangYou', sans-serif`
     const w1 = ctx.measureText('爱拼').width
-    ctx.font = `900 ${fs}px sans-serif`
+    ctx.font = `${fs}px sans-serif`
     const w2 = ctx.measureText('爱拼').width
     if (Math.abs(w1 - w2) > fs * 0.05) return
     await new Promise(r => setTimeout(r, 60))
