@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       refundAmount:  refundDecision.refundAmount,
       depositAmount: booking.deposit_amount ?? 0,
       studioName:    process.env.NEXT_PUBLIC_STUDIO_NAME ?? '糖豆人手工工作室',
-      studioEmail:   process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@pinbean.studio',
+      studioEmail:   process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk',
     })
 
     const emailResult = await sendEmail({ to: booking.email, subject, html })

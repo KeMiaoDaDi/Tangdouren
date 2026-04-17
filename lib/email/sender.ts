@@ -29,7 +29,7 @@ export async function sendEmail(params: {
   subject: string
   html: string
 }): Promise<SendResult> {
-  const from = process.env.RESEND_FROM_EMAIL ?? 'no-reply@pinbean.studio'
+  const from = process.env.RESEND_FROM_EMAIL ?? 'no-reply@tangdouren.co.uk'
   try {
     const resend = getResend()
     const { data, error } = await resend.emails.send({

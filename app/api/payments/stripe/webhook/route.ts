@@ -155,7 +155,7 @@ async function handleCheckoutCompleted(
     cancelUrl,
     studioName:    process.env.NEXT_PUBLIC_STUDIO_NAME ?? '糖豆人手工工作室',
     studioAddress: 'Unit 226, 65-75 Whitechapel Road, London E1 1DU',
-    studioEmail:   process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@pinbean.studio',
+    studioEmail:   process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk',
   })
 
   const emailResult = await sendEmail({ to: booking.email, subject, html })
