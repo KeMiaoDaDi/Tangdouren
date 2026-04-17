@@ -5,6 +5,7 @@ import { timeToMinutes, minutesToTime, fitsWithinBusinessHours } from './timeRul
 import { getAvailability, mapDbRowToExisting } from './availabilityService'
 import { assignTable } from './tableAssignmentService'
 import { getPartySizeCategory } from './config'
+import { getDepositAmount, DEPOSIT_CONFIG } from '@/lib/payment/depositConfig'
 
 // ── 日期是否被封禁 ────────────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ async function checkBlocked(supabase: SupabaseClient, date: string): Promise<boo
   return !!data
 }
 
-// ── 加载当日所有有效预约 ──────────────────────────────────────────────────────
+// ── 加载当日所有有效预约（方案A：惰性过滤超时的 payment_pending） ───────────
 
 async function loadDateBookings(supabase: SupabaseClient, date: string): Promise<ExistingBooking[]> {
   const { data, error } = await supabase
@@ -26,13 +27,26 @@ async function loadDateBookings(supabase: SupabaseClient, date: string): Promise
       booking_id, booking_date, start_time, end_time, buffered_end_time,
       party_size, accepts_sharing,
       assigned_table_id, assigned_table_code, assigned_table_type,
-      booking_mode, seat_group_type, status
+      booking_mode, seat_group_type, status, created_at
     `)
     .eq('booking_date', date)
-    .neq('status', 'cancelled')
+    .not('status', 'in', '("cancelled","payment_failed","expired")')
 
   if (error) throw error
-  return (data ?? []).map(mapDbRowToExisting)
+
+  const timeoutMs = DEPOSIT_CONFIG.paymentTimeoutMinutes * 60 * 1000
+  const now = Date.now()
+
+  return (data ?? [])
+    .filter(row => {
+      // payment_pending 超时的视为无效占位，不参与冲突计算
+      if (row.status === 'payment_pending') {
+        const age = now - new Date(row.created_at).getTime()
+        return age < timeoutMs
+      }
+      return true
+    })
+    .map(mapDbRowToExisting)
 }
 
 // ── 二次校验 + 提交预约（含并发保护） ────────────────────────────────────────
@@ -91,7 +105,10 @@ export async function createBooking(
     tableId = tableRow?.table_id ?? null
   }
 
-  // 7. 写入预约记录
+  // 7. 计算定金金额
+  const depositAmount = getDepositAmount(partySize)
+
+  // 8. 写入预约记录（状态为 payment_pending，等待支付确认后才改为 confirmed）
   const { data: booking, error: insertErr } = await supabase
     .from('bookings')
     .insert({
@@ -109,8 +126,11 @@ export async function createBooking(
       assigned_table_type:        assignment.tableType,
       booking_mode:               assignment.bookingMode,
       seat_group_type:            assignment.seatGroupType,
-      status:                     'confirmed',
+      status:                     'payment_pending',
       remark:                     remark ?? null,
+      deposit_amount:             depositAmount,
+      currency:                   DEPOSIT_CONFIG.currency,
+      payment_provider:           'stripe',
     })
     .select('booking_id')
     .single()
@@ -124,7 +144,9 @@ export async function createBooking(
     bookingMode:       assignment.bookingMode,
     endTime,
     bufferedEndTime,
-    message:           '预约成功！您的名额已锁定。',
+    depositAmount,
+    currency:          DEPOSIT_CONFIG.currency,
+    message:           '名额已预留，请在 30 分钟内完成支付。',
   }
 }
 

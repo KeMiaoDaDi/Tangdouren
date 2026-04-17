@@ -9,7 +9,16 @@ export type SeatGroupType  =
   | 'double_on_double'
   | 'double_on_four_shared'
   | 'group_on_four'
-export type BookingStatus  = 'pending' | 'confirmed' | 'completed' | 'cancelled'
+export type BookingStatus =
+  | 'payment_pending'     // 已锁位，等待支付（有超时）
+  | 'payment_failed'      // 支付失败，占位释放
+  | 'expired'             // 支付超时，占位自动释放
+  | 'confirmed'           // 支付成功，预约确认
+  | 'completed'           // 体验完成
+  | 'cancelled'           // 已取消
+  | 'refund_pending'      // 退款已发起，等待处理
+  | 'refunded'            // 全额退款完成
+  | 'partially_refunded'  // 部分退款完成（预留）
 
 // 服务层使用的桌位定义（来自 config 或 DB）
 export interface TableDef {
@@ -82,7 +91,7 @@ export interface CreateBookingRequest {
   remark?:          string
 }
 
-// POST /api/bookings 成功响应
+// POST /api/bookings 成功响应（现在返回 payment_pending 状态，需继续走支付流程）
 export interface CreateBookingResponse {
   bookingId:         string
   assignedTableCode: string
@@ -90,5 +99,7 @@ export interface CreateBookingResponse {
   bookingMode:       BookingMode
   endTime:           string
   bufferedEndTime:   string
+  depositAmount:     number   // 单位：便士，如 500 = £5
+  currency:          string   // 'gbp'
   message:           string
 }

@@ -93,6 +93,7 @@ export default function BookingPage() {
   const [bookingResult, setBookingResult] = useState<{
     bookingId: string; assignedTableCode: string; endTime: string
   } | null>(null)
+  const [redirecting, setRedirecting] = useState(false)
 
   // ── 日历数据加载 ──────────────────────────────────────────────────────────
   const fetchBlocked = useCallback(async (y: number, m: number) => {
@@ -176,14 +177,15 @@ export default function BookingPage() {
     return Object.keys(e).length === 0
   }
 
-  // ── 提交预约 ──────────────────────────────────────────────────────────────
+  // ── 提交预约 → 创建 payment_pending → 跳转 Stripe ────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validate() || !selectedOption || !selectedDate) return
     setSubmitting(true)
     setSubmitError('')
     try {
-      const res  = await fetch('/api/bookings', {
+      // Step 1: 创建预约（payment_pending 状态）
+      const bookingRes = await fetch('/api/bookings', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,10 +199,26 @@ export default function BookingPage() {
           remark:          form.remark || undefined,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) { setSubmitError(data.error ?? '提交失败，请重试'); return }
-      setBookingResult({ bookingId: data.bookingId, assignedTableCode: data.assignedTableCode, endTime: data.endTime })
-      setStep('done')
+      const bookingData = await bookingRes.json()
+      if (!bookingRes.ok) { setSubmitError(bookingData.error ?? '提交失败，请重试'); return }
+
+      setBookingResult({
+        bookingId:         bookingData.bookingId,
+        assignedTableCode: bookingData.assignedTableCode,
+        endTime:           bookingData.endTime,
+      })
+
+      // Step 2: 创建 Stripe Checkout Session
+      const sessionRes = await fetch(`/api/bookings/${bookingData.bookingId}/checkout-session`, {
+        method: 'POST',
+      })
+      const sessionData = await sessionRes.json()
+      if (!sessionRes.ok) { setSubmitError(sessionData.error ?? '支付创建失败，请重试'); return }
+
+      // Step 3: 跳转到 Stripe Checkout（离开此页面）
+      setRedirecting(true)
+      window.location.href = sessionData.checkoutUrl
+
     } catch {
       setSubmitError('网络错误，请检查连接后重试')
     } finally { setSubmitting(false) }
@@ -600,15 +618,22 @@ export default function BookingPage() {
                   <p className="text-charcoal-light">👥 人数：{partySize === 3 ? '3-4' : partySize} 人{acceptsSharing ? '（接受拼桌）' : ''}</p>
                 </div>
 
+                {/* 定金说明 */}
+                <div className="mt-5 rounded-xl bg-terracotta/5 border border-terracotta/20 px-4 py-3 text-sm text-charcoal-light">
+                  💳 提交后将跳转至支付页面，收取定金
+                  <strong className="text-terracotta"> £{partySize === 3 ? '15' : partySize === 2 ? '10' : '5'}</strong>
+                  （到店结清余款）
+                </div>
+
                 {submitError && (
                   <div className="mt-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
                     {submitError}
                   </div>
                 )}
 
-                <button type="submit" disabled={submitting} className="btn-primary w-full mt-6 py-3.5 text-base">
-                  {submitting ? '提交中…' : '确认提交预约'}
-                  {!submitting && <CheckCircle2 size={18} />}
+                <button type="submit" disabled={submitting || redirecting} className="btn-primary w-full mt-4 py-3.5 text-base">
+                  {redirecting ? '正在跳转支付…' : submitting ? '处理中…' : '下一步：支付定金'}
+                  {!submitting && !redirecting && <CheckCircle2 size={18} />}
                 </button>
               </form>
             </div>
