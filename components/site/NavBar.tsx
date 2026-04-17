@@ -37,12 +37,12 @@ export default function NavBar() {
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 shadow-sm">
+          <div className="h-14 w-14 rounded-xl overflow-hidden shrink-0 shadow-sm">
             <Image
               src="/logo.png"
               alt="糖豆人手工工作室"
-              width={80}
-              height={80}
+              width={112}
+              height={112}
               className="h-full w-full object-cover"
               priority
             />
