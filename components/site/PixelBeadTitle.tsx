@@ -89,7 +89,7 @@ export default function PixelBeadTitle() {
       await waitForZCOOL(FS)
       // 字体从缓存瞬间加载时，canvas 字体引擎可能还未完成初始化。
       // 等两帧（double rAF）确保本帧渲染完成后再采样，避免刷新后模糊。
-      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
 
       const cvs = document.createElement('canvas')
       // 按屏幕 DPI 缩放 canvas，高分屏字体渲染更清晰，采样更准确
