@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
+
+function clearPendingBooking() {
+  try { localStorage.removeItem('tangdouren_pending_booking') } catch {}
+}
 import Link from 'next/link'
 import { CheckCircle2, Clock, AlertCircle } from 'lucide-react'
 
@@ -51,6 +55,7 @@ export default function SuccessPageContent() {
       }
 
       if (bookingData.status === 'confirmed') {
+        clearPendingBooking()
         setBooking({
           bookingId:   bookingData.booking_id,
           bookingDate: bookingData.booking_date,

@@ -3,11 +3,39 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   ChevronLeft, ChevronRight, Users, CheckCircle2,
-  AlertCircle, BookOpen, Clock,
+  AlertCircle, BookOpen, Clock, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AvailabilityResult } from '@/lib/booking/types'
 import { BUSINESS_CONFIG } from '@/lib/booking/config'
+
+// ── localStorage 待支付预约 ────────────────────────────────────────────────
+const LS_KEY = 'tangdouren_pending_booking'
+
+interface PendingBooking {
+  bookingId:   string
+  checkoutUrl: string
+  displayText: string
+  expiresAt:   number  // ms timestamp
+}
+
+function savePendingBooking(data: PendingBooking) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)) } catch {}
+}
+
+function loadPendingBooking(): PendingBooking | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return null
+    const data: PendingBooking = JSON.parse(raw)
+    if (Date.now() > data.expiresAt) { localStorage.removeItem(LS_KEY); return null }
+    return data
+  } catch { return null }
+}
+
+function clearPendingBooking() {
+  try { localStorage.removeItem(LS_KEY) } catch {}
+}
 
 // ── 伦敦时间工具 ──────────────────────────────────────────────────────────────
 const TZ = 'Europe/London'
@@ -94,6 +122,10 @@ export default function BookingPage() {
     bookingId: string; assignedTableCode: string; endTime: string
   } | null>(null)
   const [redirecting, setRedirecting] = useState(false)
+
+  // ── 待支付横幅 ────────────────────────────────────────────────────────────
+  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null)
+  useEffect(() => { setPendingBooking(loadPendingBooking()) }, [])
 
   // ── 日历数据加载 ──────────────────────────────────────────────────────────
   const fetchBlocked = useCallback(async (y: number, m: number) => {
@@ -215,7 +247,15 @@ export default function BookingPage() {
       const sessionData = await sessionRes.json()
       if (!sessionRes.ok) { setSubmitError(sessionData.error ?? '支付创建失败，请重试'); return }
 
-      // Step 3: 跳转到 Stripe Checkout（离开此页面）
+      // Step 3: 保存到 localStorage，供用户返回时继续支付
+      savePendingBooking({
+        bookingId:   bookingData.bookingId,
+        checkoutUrl: sessionData.checkoutUrl,
+        displayText: `${selectedDate} ${selectedOption.startTime} · ${fmtDuration(selectedOption.durationMinutes)}`,
+        expiresAt:   Date.now() + 30 * 60 * 1000,
+      })
+
+      // Step 4: 跳转到 Stripe Checkout（离开此页面）
       setRedirecting(true)
       window.location.href = sessionData.checkoutUrl
 
@@ -236,6 +276,29 @@ export default function BookingPage() {
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-br from-cream via-warm-50 to-white">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12">
+
+        {/* ── 待支付横幅 ─────────────────────────────────────────────────── */}
+        {pendingBooking && (
+          <div className="mb-6 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-center gap-3">
+            <Clock size={18} className="text-amber-500 shrink-0" />
+            <div className="flex-1 text-sm">
+              <span className="font-medium text-amber-800">你有一笔待支付的预约</span>
+              <span className="text-amber-700 ml-1">（{pendingBooking.displayText}）</span>
+            </div>
+            <button
+              onClick={() => { window.location.href = pendingBooking.checkoutUrl }}
+              className="shrink-0 rounded-xl bg-amber-500 text-white text-xs font-semibold px-3 py-1.5 hover:bg-amber-600 transition-colors"
+            >
+              继续支付
+            </button>
+            <button
+              onClick={() => { clearPendingBooking(); setPendingBooking(null) }}
+              className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
         {/* 页面标题 */}
         <div className="text-center mb-10">
