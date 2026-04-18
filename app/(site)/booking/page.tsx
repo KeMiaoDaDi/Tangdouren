@@ -395,7 +395,7 @@ export default function BookingPage() {
                 const sel         = selectedDate === key
                 const isToday     = key === today
                 const disabled    = past || tooFar || blocked || closedToday
-                const dimmed      = past || blocked || closedToday
+                const dimmed      = past || tooFar || blocked || closedToday
 
                 return (
                   <button key={day} disabled={disabled} onClick={() => setDate(key)}
