@@ -167,7 +167,7 @@ export default function SlotsPage() {
             <div>
               <label className="label text-xs">桌位 *</label>
               <select required className="input-field text-sm py-2"
-                value={form.tableCode} onChange={e => setForm(f => ({ ...f, tableCode: e.target.value }))}>
+                value={form.tableCode} onChange={e => setForm(f => ({ ...f, tableCode: e.target.value as typeof TABLE_CODES[number] }))}>
                 {(['single', 'double', 'four'] as const).map(type => (
                   <optgroup key={type} label={`${TABLE_TYPE_LABEL[type]}桌`}>
                     {TABLE_DEFINITIONS.filter(t => t.tableType === type).map(t => (
