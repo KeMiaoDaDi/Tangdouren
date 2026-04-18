@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Download, RefreshCw, CalendarDays, List } from 'lucide-react'
+import { Search, Download, RefreshCw, CalendarDays, List, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TABLE_DEFINITIONS } from '@/lib/booking/config'
 
@@ -21,6 +21,7 @@ interface Booking {
   status:              string
   remark:              string | null
   created_at:          string
+  deposit_amount?:     number | null
 }
 
 const statusMeta: Record<string, { label: string; cls: string }> = {
@@ -46,6 +47,52 @@ function londonToday() {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/London' }).format(new Date())
 }
 
+// ── 取消确认弹窗 ──────────────────────────────────────────────────────────────
+interface CancelDialogProps {
+  booking:  Booking
+  onClose:  () => void
+  onConfirm: () => void
+  loading:  boolean
+}
+function CancelDialog({ booking, onClose, onConfirm, loading }: CancelDialogProps) {
+  const hasDeposit = (booking.deposit_amount ?? 0) > 0
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 animate-fade-in">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-9 w-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+            <AlertTriangle size={18} className="text-red-500" />
+          </div>
+          <h3 className="font-semibold text-charcoal">确认取消预约？</h3>
+        </div>
+        <div className="space-y-1.5 text-sm text-charcoal-light mb-5">
+          <p><span className="text-charcoal font-medium">{booking.customer_name}</span> 的预约：</p>
+          <p>{booking.booking_date} · {booking.start_time}–{booking.end_time} · {booking.assigned_table_code}</p>
+          {hasDeposit ? (
+            <p className="mt-3 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs">
+              该预约已支付定金 £{((booking.deposit_amount ?? 0) / 100).toFixed(2)}，取消后将自动发起全额退款。
+            </p>
+          ) : (
+            <p className="mt-3 text-charcoal-light text-xs bg-warm-50 rounded-xl px-3 py-2">
+              该预约无定金，取消后席位立即释放。
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 rounded-xl border border-sand-200 py-2 text-sm text-charcoal-light hover:bg-warm-50 transition-colors disabled:opacity-50">
+            再想想
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            className="flex-1 rounded-xl bg-red-500 text-white py-2 text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50">
+            {loading ? '处理中…' : '确认取消'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // 时长（分钟）
 function durationMin(start: string, end: string) {
   const [sh, sm] = start.split(':').map(Number)
@@ -66,6 +113,8 @@ function ListView() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null)
+  const [cancelLoading, setCancelLoading] = useState(false)
 
   const fetch_ = useCallback(async () => {
     setLoading(true)
@@ -88,16 +137,28 @@ function ListView() {
 
   const detail = bookings.find(b => b.booking_id === selected)
 
-  async function updateStatus(id: string, status: string) {
+  async function markCompleted(id: string) {
     setSaving(true)
     try {
       await fetch(`/api/bookings/${id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: 'completed' }),
       })
       await fetch_()
       if (selected === id) setSelected(null)
     } finally { setSaving(false) }
+  }
+
+  async function confirmCancel(booking: Booking) {
+    setCancelLoading(true)
+    try {
+      const res  = await fetch(`/api/admin/bookings/${booking.booking_id}/cancel`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error ?? '取消失败'); return }
+      setCancelTarget(null)
+      if (selected === booking.booking_id) setSelected(null)
+      await fetch_()
+    } finally { setCancelLoading(false) }
   }
 
   function exportCSV() {
@@ -122,6 +183,16 @@ function ListView() {
 
   return (
     <div className="space-y-5">
+      {/* 取消确认弹窗 */}
+      {cancelTarget && (
+        <CancelDialog
+          booking={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onConfirm={() => confirmCancel(cancelTarget)}
+          loading={cancelLoading}
+        />
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-sm text-charcoal-light">共 {bookings.length} 条记录</p>
         <div className="flex gap-2">
@@ -193,9 +264,9 @@ function ListView() {
                         <td className="px-4 py-3.5 text-right" onClick={e => e.stopPropagation()}>
                           {b.status === 'confirmed' && (
                             <div className="flex items-center justify-end gap-1">
-                              <button disabled={saving} onClick={() => updateStatus(b.booking_id, 'completed')}
+                              <button disabled={saving} onClick={() => markCompleted(b.booking_id)}
                                 className="rounded-lg bg-sage/10 px-2.5 py-1 text-xs text-sage-dark hover:bg-sage/20 font-medium disabled:opacity-50">✓ 完成</button>
-                              <button disabled={saving} onClick={() => updateStatus(b.booking_id, 'cancelled')}
+                              <button disabled={saving} onClick={() => setCancelTarget(b)}
                                 className="rounded-lg bg-red-50 px-2.5 py-1 text-xs text-red-500 hover:bg-red-100 font-medium disabled:opacity-50">✕ 取消</button>
                             </div>
                           )}
@@ -238,11 +309,11 @@ function ListView() {
             </div>
             {detail.status === 'confirmed' && (
               <div className="mt-5 pt-4 border-t border-sand-100 flex gap-2">
-                <button disabled={saving} onClick={() => updateStatus(detail.booking_id, 'completed')}
+                <button disabled={saving} onClick={() => markCompleted(detail.booking_id)}
                   className="flex-1 rounded-xl bg-sage/10 py-2 text-sm text-sage-dark font-medium hover:bg-sage/20 disabled:opacity-50">
                   标记为已完成
                 </button>
-                <button disabled={saving} onClick={() => updateStatus(detail.booking_id, 'cancelled')}
+                <button disabled={saving} onClick={() => setCancelTarget(detail)}
                   className="flex-1 rounded-xl bg-red-50 py-2 text-sm text-red-500 font-medium hover:bg-red-100 disabled:opacity-50">
                   取消预约
                 </button>
@@ -271,6 +342,8 @@ function ScheduleView() {
   const [bookings,   setBookings]   = useState<Booking[]>([])
   const [loading,    setLoading]    = useState(false)
   const [saving,     setSaving]     = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null)
+  const [cancelLoading, setCancelLoading] = useState(false)
 
   const loadDay = useCallback(async (d: string) => {
     setLoading(true)
@@ -283,15 +356,26 @@ function ScheduleView() {
 
   useEffect(() => { loadDay(date) }, [date, loadDay])
 
-  async function updateStatus(id: string, status: string) {
+  async function markCompleted(id: string) {
     setSaving(true)
     try {
       await fetch(`/api/bookings/${id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: 'completed' }),
       })
       await loadDay(date)
     } finally { setSaving(false) }
+  }
+
+  async function confirmCancel(booking: Booking) {
+    setCancelLoading(true)
+    try {
+      const res  = await fetch(`/api/admin/bookings/${booking.booking_id}/cancel`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error ?? '取消失败'); return }
+      setCancelTarget(null)
+      await loadDay(date)
+    } finally { setCancelLoading(false) }
   }
 
   // 时间轴刻度（每小时一条）
@@ -321,6 +405,15 @@ function ScheduleView() {
 
   return (
     <div className="space-y-5">
+      {/* 取消确认弹窗 */}
+      {cancelTarget && (
+        <CancelDialog
+          booking={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onConfirm={() => confirmCancel(cancelTarget)}
+          loading={cancelLoading}
+        />
+      )}
       {/* 筛选栏 */}
       <div className="card p-4 flex flex-wrap gap-4 items-end">
         <div>
@@ -432,12 +525,12 @@ function ScheduleView() {
                           {b.status === 'confirmed' && (
                             <div className="absolute inset-x-0.5 bottom-0.5 hidden group-hover:flex gap-0.5">
                               <button disabled={saving}
-                                onClick={() => updateStatus(b.booking_id, 'completed')}
+                                onClick={() => markCompleted(b.booking_id)}
                                 className="flex-1 rounded bg-white/70 text-[9px] text-sage-dark hover:bg-white font-medium py-0.5 disabled:opacity-50">
                                 ✓
                               </button>
                               <button disabled={saving}
-                                onClick={() => updateStatus(b.booking_id, 'cancelled')}
+                                onClick={() => setCancelTarget(b)}
                                 className="flex-1 rounded bg-white/70 text-[9px] text-red-500 hover:bg-white font-medium py-0.5 disabled:opacity-50">
                                 ✕
                               </button>

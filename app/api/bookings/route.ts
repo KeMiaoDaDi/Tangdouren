@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         party_size, accepts_sharing, start_time, end_time,
         assigned_table_code, assigned_table_type,
         booking_mode, seat_group_type,
-        status, remark, created_at
+        status, remark, created_at, deposit_amount
       `)
       .order('created_at', { ascending: false })
 
