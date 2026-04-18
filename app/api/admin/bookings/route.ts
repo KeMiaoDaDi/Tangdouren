@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       .insert({
         booking_date:               date,
         customer_name:              customerName,
-        email:                      email || null,
+        email:                      email || '',
         party_size:                 effectivePartySize,
         accepts_sharing:            false,
         start_time:                 startTime,
