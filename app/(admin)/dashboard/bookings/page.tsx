@@ -24,9 +24,15 @@ interface Booking {
 }
 
 const statusMeta: Record<string, { label: string; cls: string }> = {
-  confirmed: { label: '已确认', cls: 'badge-confirmed' },
-  cancelled:  { label: '已取消', cls: 'badge-cancelled' },
-  completed:  { label: '已完成', cls: 'badge-completed' },
+  confirmed:          { label: '已确认',  cls: 'badge-confirmed' },
+  cancelled:          { label: '已取消',  cls: 'badge-cancelled' },
+  completed:          { label: '已完成',  cls: 'badge-completed' },
+  payment_pending:    { label: '待支付',  cls: 'badge-pending' },
+  expired:            { label: '已过期',  cls: 'badge-expired' },
+  payment_failed:     { label: '支付失败', cls: 'badge-expired' },
+  refund_pending:     { label: '退款中',  cls: 'badge-pending' },
+  refunded:           { label: '已退款',  cls: 'badge-cancelled' },
+  partially_refunded: { label: '部分退款', cls: 'badge-cancelled' },
 }
 
 const tableTypeLabel: Record<string, string> = {

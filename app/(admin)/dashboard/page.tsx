@@ -5,9 +5,15 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const statusLabel: Record<string, { label: string; cls: string }> = {
-  confirmed: { label: '已确认', cls: 'badge-confirmed' },
-  cancelled: { label: '已取消', cls: 'badge-cancelled' },
-  completed: { label: '已完成', cls: 'badge-completed' },
+  confirmed:          { label: '已确认',  cls: 'badge-confirmed' },
+  cancelled:          { label: '已取消',  cls: 'badge-cancelled' },
+  completed:          { label: '已完成',  cls: 'badge-completed' },
+  payment_pending:    { label: '待支付',  cls: 'badge-pending' },
+  expired:            { label: '已过期',  cls: 'badge-expired' },
+  payment_failed:     { label: '支付失败', cls: 'badge-expired' },
+  refund_pending:     { label: '退款中',  cls: 'badge-pending' },
+  refunded:           { label: '已退款',  cls: 'badge-cancelled' },
+  partially_refunded: { label: '部分退款', cls: 'badge-cancelled' },
 }
 
 const tableTypeLabel: Record<string, string> = {
@@ -33,22 +39,22 @@ export default async function DashboardPage() {
   const today    = londonToday()
   const { from: monthFrom, to: monthTo } = londonMonthRange()
 
-  // 今日预约数
+  // 今日确认预约数
   const { count: todayCount } = await supabase
     .from('bookings')
     .select('booking_id', { count: 'exact', head: true })
     .eq('booking_date', today)
-    .neq('status', 'cancelled')
+    .eq('status', 'confirmed')
 
-  // 今日时段概览（各桌预约情况）
+  // 今日时段概览（仅已确认）
   const { data: todayBookings } = await supabase
     .from('bookings')
     .select('assigned_table_code, assigned_table_type, start_time, end_time, party_size, booking_mode, status')
     .eq('booking_date', today)
-    .neq('status', 'cancelled')
+    .eq('status', 'confirmed')
     .order('start_time')
 
-  // 本月已完成数
+  // 本月已完成数（数据库 status = completed）
   const { count: completedCount } = await supabase
     .from('bookings')
     .select('booking_id', { count: 'exact', head: true })
@@ -56,15 +62,30 @@ export default async function DashboardPage() {
     .gte('booking_date', monthFrom)
     .lte('booking_date', monthTo)
 
-  // 本月参与总人数
-  const { data: partySums } = await supabase
+  // 本月参与人数：confirmed 且 end_time + 1h < 伦敦当前时间（即已实际完成的场次）
+  const londonNowDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/London' }).format(new Date())
+  const londonNowTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date())
+  const londonNowStr = `${londonNowDate} ${londonNowTime}` // "YYYY-MM-DD HH:MM"
+
+  const { data: confirmedMonthly } = await supabase
     .from('bookings')
-    .select('party_size')
-    .neq('status', 'cancelled')
+    .select('party_size, booking_date, end_time')
+    .eq('status', 'confirmed')
     .gte('booking_date', monthFrom)
     .lte('booking_date', monthTo)
 
-  const totalPeople = (partySums ?? []).reduce((s, b) => s + (b.party_size ?? 0), 0)
+  // 过滤：end_time + 1 小时 < 伦敦现在（字符串比较，ISO 格式可直接排序）
+  const totalPeople = (confirmedMonthly ?? [])
+    .filter(b => {
+      if (!b.end_time) return false
+      const [eh, em] = b.end_time.substring(0, 5).split(':').map(Number)
+      const cutMin  = eh * 60 + em + 60
+      const cutStr  = `${b.booking_date} ${String(Math.floor(cutMin / 60)).padStart(2, '0')}:${String(cutMin % 60).padStart(2, '0')}`
+      return cutStr < londonNowStr
+    })
+    .reduce((s, b) => s + (b.party_size ?? 0), 0)
 
   // 最近 5 条预约
   const { data: recent } = await supabase
@@ -74,9 +95,9 @@ export default async function DashboardPage() {
     .limit(5)
 
   const stats = [
-    { label: '今日预约',    value: String(todayCount ?? 0),    sub: today,           icon: CalendarDays, color: 'bg-terracotta/10 text-terracotta' },
-    { label: '本月已完成',  value: String(completedCount ?? 0), sub: '场次',          icon: CheckCircle2, color: 'bg-sage/10 text-sage-dark' },
-    { label: '本月参与人数', value: String(totalPeople),         sub: '人次（未取消）', icon: Users,        color: 'bg-blue-100 text-blue-600' },
+    { label: '今日预约',    value: String(todayCount ?? 0),    sub: today,         icon: CalendarDays, color: 'bg-terracotta/10 text-terracotta' },
+    { label: '本月已完成',  value: String(completedCount ?? 0), sub: '场次',        icon: CheckCircle2, color: 'bg-sage/10 text-sage-dark' },
+    { label: '本月参与人数', value: String(totalPeople),         sub: '人次（已完成场次）', icon: Users, color: 'bg-blue-100 text-blue-600' },
   ]
 
   return (
