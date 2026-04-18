@@ -167,14 +167,28 @@ export default function BookingPage() {
 
   // ── 日历辅助 ──────────────────────────────────────────────────────────────
   const isCurrentMonth = year === iy && month === im
+
+  // 最远可选日期：今天起整整 1 个月（含当天）
+  const maxDate = useMemo(() => {
+    const d = new Date(today)
+    d.setMonth(d.getMonth() + 1)
+    return d.toISOString().slice(0, 10)
+  }, [today])
+  // 最远可导航的月份（maxDate 所在年/月）
+  const maxYear  = useMemo(() => parseInt(maxDate.slice(0, 4)), [maxDate])
+  const maxMonth = useMemo(() => parseInt(maxDate.slice(5, 7)) - 1, [maxDate])
+  const isMaxMonth = year === maxYear && month === maxMonth
+
   function prevMonth() {
     if (isCurrentMonth) return
     if (month === 0) { setYear(y => y - 1); setMonth(11) } else setMonth(m => m - 1)
   }
   function nextMonth() {
+    if (isMaxMonth) return
     if (month === 11) { setYear(y => y + 1); setMonth(0) } else setMonth(m => m + 1)
   }
   function isPast(day: number)    { return dateKey(year, month, day) < today }
+  function isTooFar(day: number)  { return dateKey(year, month, day) > maxDate }
   function isBlocked(day: number) { return blockedDates.includes(dateKey(year, month, day)) }
   function isClosedToday(day: number) {
     return isTodayClosed && dateKey(year, month, day) === today
@@ -357,7 +371,10 @@ export default function BookingPage() {
                 <ChevronLeft size={18} />
               </button>
               <span className="font-display font-semibold text-charcoal">{year} 年 {MONTHS[month]}</span>
-              <button onClick={nextMonth} className="btn-ghost p-2"><ChevronRight size={18} /></button>
+              <button onClick={nextMonth} disabled={isMaxMonth}
+                className={cn('btn-ghost p-2', isMaxMonth && 'opacity-30 cursor-not-allowed')}>
+                <ChevronRight size={18} />
+              </button>
             </div>
 
             <div className="grid grid-cols-7 mb-2">
@@ -372,11 +389,12 @@ export default function BookingPage() {
                 const day     = i + 1
                 const key     = dateKey(year, month, day)
                 const past        = isPast(day)
+                const tooFar      = isTooFar(day)
                 const blocked     = isBlocked(day)
                 const closedToday = isClosedToday(day)
                 const sel         = selectedDate === key
                 const isToday     = key === today
-                const disabled    = past || blocked || closedToday
+                const disabled    = past || tooFar || blocked || closedToday
                 const dimmed      = past || blocked || closedToday
 
                 return (
