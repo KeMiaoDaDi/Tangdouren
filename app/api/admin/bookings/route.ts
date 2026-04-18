@@ -56,99 +56,100 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `时间必须在营业时间内 (${cfg.openTime}–${cfg.closeTime})` }, { status: 400 })
   }
 
-  const admin = createAdminClient()
+  try {
+    const admin = createAdminClient()
 
-  // 查询桌位信息（获取 table_id 和 tableType）
-  const { data: tableRow } = await admin
-    .from('tables')
-    .select('table_id, table_type')
-    .eq('table_code', tableCode)
-    .single()
+    // 查询桌位信息（获取 table_id 和 tableType）
+    const { data: tableRow, error: tableErr } = await admin
+      .from('tables')
+      .select('table_id, table_type')
+      .eq('table_code', tableCode)
+      .single()
 
-  if (!tableRow) {
-    return NextResponse.json({ error: `桌位 ${tableCode} 不存在` }, { status: 400 })
-  }
+    if (tableErr || !tableRow) {
+      return NextResponse.json({ error: `桌位 ${tableCode} 不存在` }, { status: 400 })
+    }
 
-  const bufferedEndTime = minToTime(endMin + cfg.cleanupBufferMinutes)
+    const bufferedEndTime = minToTime(endMin + cfg.cleanupBufferMinutes)
 
-  // 冲突检测：同桌、同日、时间重叠的有效预约
-  const { data: conflicts } = await admin
-    .from('bookings')
-    .select('booking_id, customer_name, start_time, buffered_end_time')
-    .eq('assigned_table_code', tableCode)
-    .eq('booking_date', date)
-    .not('status', 'in', '("cancelled","payment_failed","expired")')
-    .lt('start_time', bufferedEndTime)   // 现有预约开始 < 新预约缓冲结束
-    .gt('buffered_end_time', startTime)  // 现有预约缓冲结束 > 新预约开始
+    // 冲突检测：同桌、同日、时间重叠的有效预约
+    const { data: conflicts } = await admin
+      .from('bookings')
+      .select('booking_id, customer_name, start_time, buffered_end_time')
+      .eq('assigned_table_code', tableCode)
+      .eq('booking_date', date)
+      .not('status', 'in', '("cancelled","payment_failed","expired")')
+      .lt('start_time', bufferedEndTime)
+      .gt('buffered_end_time', startTime)
 
-  if (conflicts && conflicts.length > 0) {
-    const c = conflicts[0]
-    return NextResponse.json(
-      { error: `${tableCode} 在 ${c.start_time}–${c.buffered_end_time} 已有预约（${c.customer_name}），时间冲突` },
-      { status: 409 }
-    )
-  }
+    if (conflicts && conflicts.length > 0) {
+      const c = conflicts[0]
+      return NextResponse.json(
+        { error: `${tableCode} 在 ${c.start_time}–${c.buffered_end_time} 已有预约（${c.customer_name}），时间冲突` },
+        { status: 409 }
+      )
+    }
 
-  // 推断桌型对应的人数
-  const tableTypeCapacity: Record<string, number> = { single: 1, double: 2, four: 4 }
-  const effectivePartySize = partySize ?? tableTypeCapacity[tableRow.table_type] ?? 1
+    // 推断桌型对应的人数
+    const tableTypeCapacity: Record<string, number> = { single: 1, double: 2, four: 4 }
+    const effectivePartySize = partySize ?? tableTypeCapacity[tableRow.table_type] ?? 1
 
-  // 根据桌型推导 seat_group_type（整桌私人预约）
-  const seatGroupTypeMap: Record<string, string> = {
-    single: 'single_on_single',
-    double: 'double_on_double',
-    four:   'group_on_four',
-  }
-  const seatGroupType = seatGroupTypeMap[tableRow.table_type] ?? 'single_on_single'
+    // 根据桌型推导 seat_group_type（整桌私人预约）
+    const seatGroupTypeMap: Record<string, string> = {
+      single: 'single_on_single',
+      double: 'double_on_double',
+      four:   'group_on_four',
+    }
+    const seatGroupType = seatGroupTypeMap[tableRow.table_type] ?? 'single_on_single'
 
-  // 直接创建 confirmed 预约（管理员操作，无需定金）
-  const { data: booking, error: insertErr } = await admin
-    .from('bookings')
-    .insert({
-      booking_date:               date,
-      customer_name:              customerName,
-      email:                      email || null,
-      party_size:                 effectivePartySize,
-      accepts_sharing:            false,
-      start_time:                 startTime,
-      end_time:                   endTime,
-      buffered_end_time:          bufferedEndTime,
-      estimated_duration_minutes: endMin - startMin,
-      assigned_table_id:          tableRow.table_id,
-      assigned_table_code:        tableCode,
-      assigned_table_type:        tableRow.table_type,
-      booking_mode:               'private_full_table',
-      seat_group_type:            seatGroupType,
-      status:                     'confirmed',
-      remark:                     remark ?? '管理员手动预约',
-      deposit_amount:             0,
-      currency:                   'gbp',
+    // 直接创建 confirmed 预约（管理员操作，无需定金）
+    const { data: booking, error: insertErr } = await admin
+      .from('bookings')
+      .insert({
+        booking_date:               date,
+        customer_name:              customerName,
+        email:                      email || null,
+        party_size:                 effectivePartySize,
+        accepts_sharing:            false,
+        start_time:                 startTime,
+        end_time:                   endTime,
+        buffered_end_time:          bufferedEndTime,
+        estimated_duration_minutes: endMin - startMin,
+        assigned_table_id:          tableRow.table_id,
+        assigned_table_code:        tableCode,
+        assigned_table_type:        tableRow.table_type,
+        booking_mode:               'private_full_table',
+        seat_group_type:            seatGroupType,
+        status:                     'confirmed',
+        remark:                     remark ?? '管理员手动预约',
+        deposit_amount:             0,
+        currency:                   'gbp',
+      })
+      .select('booking_id')
+      .single()
+
+    if (insertErr) {
+      console.error('[POST /api/admin/bookings] insert error:', insertErr)
+      return NextResponse.json({ error: insertErr.message }, { status: 500 })
+    }
+
+    // 审计日志（不阻塞主流程）
+    void admin.from('booking_events').insert({
+      booking_id: booking.booking_id,
+      event_type: 'admin_manual_booking',
+      metadata: { created_by: user.email ?? user.id, table: tableCode },
     })
-    .select('booking_id')
-    .single()
 
-  if (insertErr) {
-    console.error('[POST /api/admin/bookings]', insertErr)
-    return NextResponse.json({ error: '创建失败，请稍后重试' }, { status: 500 })
-  }
+    // 发送预约确认邮件（有邮箱时，不阻塞主流程）
+    if (email) {
+      const studioName    = process.env.NEXT_PUBLIC_STUDIO_NAME  ?? '糖豆人手工工作室'
+      const studioEmail   = process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk'
+      const studioAddress = process.env.NEXT_PUBLIC_STUDIO_ADDRESS ?? 'Algate East, London'
+      const tableTypeNames: Record<string, string> = { single: '单人桌', double: '双人桌', four: '四人桌' }
+      const tableDisplay  = `${tableTypeNames[tableRow.table_type] ?? tableRow.table_type} · ${tableCode}`
 
-  // 审计日志
-  await admin.from('booking_events').insert({
-    booking_id: booking.booking_id,
-    event_type: 'admin_manual_booking',
-    metadata: { created_by: user.email ?? user.id, table: tableCode },
-  })
-
-  // 发送预约确认邮件（有邮箱时）
-  if (email) {
-    const studioName    = process.env.NEXT_PUBLIC_STUDIO_NAME  ?? '糖豆人手工工作室'
-    const studioEmail   = process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk'
-    const studioAddress = process.env.NEXT_PUBLIC_STUDIO_ADDRESS ?? 'Algate East, London'
-    const tableTypeNames: Record<string, string> = { single: '单人桌', double: '双人桌', four: '四人桌' }
-    const tableDisplay  = `${tableTypeNames[tableRow.table_type] ?? tableRow.table_type} · ${tableCode}`
-
-    const subject = `预约确认 — ${date} ${startTime} | ${studioName}`
-    const html = `
+      const subject = `预约确认 — ${date} ${startTime} | ${studioName}`
+      const html = `
 <!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"/>
 <style>
   body{font-family:Arial,sans-serif;background:#faf8f5;margin:0;padding:0;}
@@ -185,8 +186,14 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`.trim()
 
-    await sendEmail({ to: email, subject, html })
-  }
+      void sendEmail({ to: email, subject, html })
+    }
 
-  return NextResponse.json({ bookingId: booking.booking_id, tableCode }, { status: 201 })
+    return NextResponse.json({ bookingId: booking.booking_id, tableCode }, { status: 201 })
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[POST /api/admin/bookings] unexpected error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }
