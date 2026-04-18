@@ -370,17 +370,16 @@ function ScheduleView() {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <div style={{ minWidth: `${visibleTables.length * 100 + 60}px` }}>
+            <div>
 
-              {/* 时间轴表头 */}
+              {/* 表头：时间轴占位 + 桌位列 */}
               <div className="relative border-b border-sand-100 bg-warm-50">
-                {/* 桌位列标题 */}
                 <div className="flex">
-                  <div className="w-14 shrink-0" />
+                  <div className="w-10 shrink-0" />
                   {visibleTables.map(code => {
                     const def = TABLE_DEFINITIONS.find(t => t.tableCode === code)
                     return (
-                      <div key={code} className="flex-1 min-w-[90px] text-center py-2.5 border-l border-sand-100">
+                      <div key={code} className="flex-1 text-center py-2.5 border-l border-sand-100 min-w-0">
                         <div className="text-xs font-semibold text-charcoal">{code}</div>
                         <div className="text-[10px] text-charcoal-light">{tableTypeLabel[def?.tableType ?? ''] ?? ''}</div>
                       </div>
@@ -390,28 +389,28 @@ function ScheduleView() {
               </div>
 
               {/* 时间轴主体 */}
-              <div className="relative flex">
-                {/* 小时刻度列 */}
-                <div className="w-14 shrink-0 relative" style={{ height: `${TOTAL_MIN * 1.2}px` }}>
+              <div className="relative flex" style={{ height: `${TOTAL_MIN * 1.2}px` }}>
+                {/* 水平刻度线：全宽，放在最底层 */}
+                {hourTicks.map(h => (
+                  <div key={`line-${h}`}
+                    className="absolute left-0 right-0 border-t border-sand-100 pointer-events-none"
+                    style={{ top: `${(h * 60 - OPEN_MIN) * 1.2}px` }} />
+                ))}
+
+                {/* 小时刻度文字列 */}
+                <div className="w-10 shrink-0 relative z-10">
                   {hourTicks.map(h => (
                     <div key={h}
-                      className="absolute right-2 text-[10px] text-charcoal-light/70 leading-none"
+                      className="absolute right-1.5 text-[10px] text-charcoal-light/70 leading-none"
                       style={{ top: `${(h * 60 - OPEN_MIN) * 1.2}px`, transform: 'translateY(-50%)' }}>
                       {String(h).padStart(2,'0')}:00
                     </div>
-                  ))}
-                  {/* 水平刻度线（延伸到整行） */}
-                  {hourTicks.map(h => (
-                    <div key={`line-${h}`}
-                      className="absolute left-0 right-0 border-t border-sand-100"
-                      style={{ top: `${(h * 60 - OPEN_MIN) * 1.2}px`, width: `${visibleTables.length * 100 + 60}vw` }} />
                   ))}
                 </div>
 
                 {/* 每桌时间轴 */}
                 {visibleTables.map(code => (
-                  <div key={code} className="flex-1 min-w-[90px] relative border-l border-sand-100"
-                    style={{ height: `${TOTAL_MIN * 1.2}px` }}>
+                  <div key={code} className="flex-1 min-w-0 relative border-l border-sand-100 z-10">
                     {(bookingsByTable[code] ?? []).map(b => {
                       const startPx = (timeToMin(b.start_time) - OPEN_MIN) * 1.2
                       const dur     = durationMin(b.start_time, b.end_time)
@@ -419,7 +418,7 @@ function ScheduleView() {
                       return (
                         <div key={b.booking_id}
                           className={cn(
-                            'absolute inset-x-1 rounded-lg border px-1.5 py-1 overflow-hidden cursor-default group',
+                            'absolute inset-x-0.5 rounded-lg border px-1 py-0.5 overflow-hidden cursor-default group',
                             bookingColor(b)
                           )}
                           style={{ top: `${startPx}px`, height: `${height}px` }}
@@ -431,7 +430,7 @@ function ScheduleView() {
 
                           {/* 悬停操作 */}
                           {b.status === 'confirmed' && (
-                            <div className="absolute inset-x-1 bottom-1 hidden group-hover:flex gap-1">
+                            <div className="absolute inset-x-0.5 bottom-0.5 hidden group-hover:flex gap-0.5">
                               <button disabled={saving}
                                 onClick={() => updateStatus(b.booking_id, 'completed')}
                                 className="flex-1 rounded bg-white/70 text-[9px] text-sage-dark hover:bg-white font-medium py-0.5 disabled:opacity-50">
@@ -441,7 +440,7 @@ function ScheduleView() {
                                 onClick={() => updateStatus(b.booking_id, 'cancelled')}
                                 className="flex-1 rounded bg-white/70 text-[9px] text-red-500 hover:bg-white font-medium py-0.5 disabled:opacity-50">
                                 ✕
-              </button>
+                              </button>
                             </div>
                           )}
                         </div>
