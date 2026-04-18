@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { BUSINESS_CONFIG as cfg } from '@/lib/booking/config'
+import { sendEmail } from '@/lib/email/sender'
 
 const Schema = z.object({
   date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式错误'),
@@ -137,6 +138,55 @@ export async function POST(request: NextRequest) {
     event_type: 'admin_manual_booking',
     metadata: { created_by: user.email ?? user.id, table: tableCode },
   })
+
+  // 发送预约确认邮件（有邮箱时）
+  if (email) {
+    const studioName    = process.env.NEXT_PUBLIC_STUDIO_NAME  ?? '糖豆人手工工作室'
+    const studioEmail   = process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk'
+    const studioAddress = process.env.NEXT_PUBLIC_STUDIO_ADDRESS ?? 'Algate East, London'
+    const tableTypeNames: Record<string, string> = { single: '单人桌', double: '双人桌', four: '四人桌' }
+    const tableDisplay  = `${tableTypeNames[tableRow.table_type] ?? tableRow.table_type} · ${tableCode}`
+
+    const subject = `预约确认 — ${date} ${startTime} | ${studioName}`
+    const html = `
+<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"/>
+<style>
+  body{font-family:Arial,sans-serif;background:#faf8f5;margin:0;padding:0;}
+  .c{max-width:520px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);}
+  .h{background:linear-gradient(135deg,#D97059,#C4573A);padding:28px 32px 20px;text-align:center;color:#fff;}
+  .h h1{margin:0 0 4px;font-size:20px;}
+  .h p{margin:0;font-size:13px;opacity:.85;}
+  .b{padding:24px 32px;}
+  .g{font-size:15px;color:#3d2f2a;margin-bottom:18px;}
+  .box{background:#fdf6f0;border:1px solid #f0e0d0;border-radius:12px;padding:18px;margin-bottom:20px;}
+  .row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid #f5ede5;}
+  .row:last-child{border-bottom:none;}
+  .lbl{color:#8a7060;}.val{color:#3d2f2a;font-weight:600;text-align:right;}
+  .note{background:#fff8f0;border-left:3px solid #D97059;padding:12px 14px;border-radius:0 8px 8px 0;font-size:13px;color:#6b4c3b;line-height:1.6;margin-bottom:20px;}
+  .ft{padding:16px 32px 24px;border-top:1px solid #f0e8e0;font-size:12px;color:#b09080;text-align:center;line-height:1.8;}
+</style></head><body>
+<div class="c">
+  <div class="h"><h1>🎉 预约已确认！</h1><p>${studioName}</p></div>
+  <div class="b">
+    <p class="g">你好，${customerName}！<br/>你的拼豆体验名额已确认，期待与你相见 ✨</p>
+    <div class="box">
+      <div class="row"><span class="lbl">📅 日期</span><span class="val">${date}</span></div>
+      <div class="row"><span class="lbl">⏰ 时间</span><span class="val">${startTime} – ${endTime}</span></div>
+      <div class="row"><span class="lbl">🪑 桌位</span><span class="val">${tableDisplay}</span></div>
+      <div class="row"><span class="lbl">👥 人数</span><span class="val">${effectivePartySize} 人</span></div>
+      <div class="row"><span class="lbl">📍 地址</span><span class="val">${studioAddress}</span></div>
+    </div>
+    <div class="note">
+      如需修改或取消预约，请提前联系我们：<br/>
+      📧 <a href="mailto:${studioEmail}" style="color:#D97059;">${studioEmail}</a>
+    </div>
+  </div>
+  <div class="ft">${studioName} · ${studioAddress}<br/>📧 ${studioEmail}</div>
+</div>
+</body></html>`.trim()
+
+    await sendEmail({ to: email, subject, html })
+  }
 
   return NextResponse.json({ bookingId: booking.booking_id, tableCode }, { status: 201 })
 }
