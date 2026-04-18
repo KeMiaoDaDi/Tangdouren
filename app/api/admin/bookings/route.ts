@@ -92,6 +92,14 @@ export async function POST(request: NextRequest) {
   const tableTypeCapacity: Record<string, number> = { single: 1, double: 2, four: 4 }
   const effectivePartySize = partySize ?? tableTypeCapacity[tableRow.table_type] ?? 1
 
+  // 根据桌型推导 seat_group_type（整桌私人预约）
+  const seatGroupTypeMap: Record<string, string> = {
+    single: 'single_on_single',
+    double: 'double_on_double',
+    four:   'group_on_four',
+  }
+  const seatGroupType = seatGroupTypeMap[tableRow.table_type] ?? 'single_on_single'
+
   // 直接创建 confirmed 预约（管理员操作，无需定金）
   const { data: booking, error: insertErr } = await admin
     .from('bookings')
@@ -108,8 +116,8 @@ export async function POST(request: NextRequest) {
       assigned_table_id:          tableRow.table_id,
       assigned_table_code:        tableCode,
       assigned_table_type:        tableRow.table_type,
-      booking_mode:               'private_table',
-      seat_group_type:            'private_table',
+      booking_mode:               'private_full_table',
+      seat_group_type:            seatGroupType,
       status:                     'confirmed',
       remark:                     remark ?? '管理员手动预约',
       deposit_amount:             0,
@@ -120,7 +128,7 @@ export async function POST(request: NextRequest) {
 
   if (insertErr) {
     console.error('[POST /api/admin/bookings]', insertErr)
-    return NextResponse.json({ error: insertErr.message ?? '创建失败，请稍后重试' }, { status: 500 })
+    return NextResponse.json({ error: '创建失败，请稍后重试' }, { status: 500 })
   }
 
   // 审计日志
