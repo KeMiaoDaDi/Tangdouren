@@ -109,19 +109,18 @@ export async function POST(request: NextRequest) {
       assigned_table_code:        tableCode,
       assigned_table_type:        tableRow.table_type,
       booking_mode:               'private_table',
-      seat_group_type:            'private',
+      seat_group_type:            'private_table',
       status:                     'confirmed',
       remark:                     remark ?? '管理员手动预约',
       deposit_amount:             0,
       currency:                   'gbp',
-      payment_provider:           null,
     })
     .select('booking_id')
     .single()
 
   if (insertErr) {
     console.error('[POST /api/admin/bookings]', insertErr)
-    return NextResponse.json({ error: '创建失败，请稍后重试' }, { status: 500 })
+    return NextResponse.json({ error: insertErr.message ?? '创建失败，请稍后重试' }, { status: 500 })
   }
 
   // 审计日志
