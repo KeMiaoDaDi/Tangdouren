@@ -186,7 +186,10 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`.trim()
 
-      void sendEmail({ to: email, subject, html })
+      sendEmail({ to: email, subject, html }).then(r => {
+        if (!r.ok) console.error('[admin booking] 邮件发送失败:', r.error)
+        else console.log('[admin booking] 邮件已发送, messageId:', r.messageId)
+      }).catch(e => console.error('[admin booking] 邮件异常:', e))
     }
 
     return NextResponse.json({ bookingId: booking.booking_id, tableCode }, { status: 201 })
