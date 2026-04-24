@@ -16,14 +16,13 @@ export const BUSINESS_CONFIG = {
 
 export type BusinessConfig = typeof BUSINESS_CONFIG
 
-// 物理桌位定义
+// 物理桌位定义（S6 已永久移除）
 export const TABLE_DEFINITIONS = [
   { tableCode: 'S1', tableType: 'single' as const, capacity: 1 },
   { tableCode: 'S2', tableType: 'single' as const, capacity: 1 },
   { tableCode: 'S3', tableType: 'single' as const, capacity: 1 },
   { tableCode: 'S4', tableType: 'single' as const, capacity: 1 },
   { tableCode: 'S5', tableType: 'single' as const, capacity: 1 },
-  { tableCode: 'S6', tableType: 'single' as const, capacity: 1 },
   { tableCode: 'D1', tableType: 'double' as const, capacity: 2 },
   { tableCode: 'D2', tableType: 'double' as const, capacity: 2 },
   { tableCode: 'D3', tableType: 'double' as const, capacity: 2 },
@@ -31,6 +30,10 @@ export const TABLE_DEFINITIONS = [
   { tableCode: 'F1', tableType: 'four'   as const, capacity: 4 },
   { tableCode: 'F2', tableType: 'four'   as const, capacity: 4 },
 ] as const
+
+// 暂时对官网关闭预约的桌位（管理员手动预约仍可用）
+// 恢复时从此数组移除对应桌号即可
+export const DISABLED_TABLE_CODES: string[] = ['S4', 'S5']
 
 export type TableType = 'single' | 'double' | 'four'
 

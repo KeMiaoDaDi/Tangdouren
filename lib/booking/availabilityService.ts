@@ -1,6 +1,7 @@
 import {
   BUSINESS_CONFIG,
   TABLE_DEFINITIONS,
+  DISABLED_TABLE_CODES,
   EXACT_TABLE_TYPE,
   SHARING_UPGRADE_TYPE,
   getPartySizeCategory,
@@ -117,7 +118,7 @@ export function getAvailability(params: GetAvailabilityParams): AvailabilityResu
   const resultMap = new Map<number, Map<string, AvailabilityOption>>()
 
   const tables: TableDef[] = TABLE_DEFINITIONS.map(t => ({
-    ...t, isActive: true,
+    ...t, isActive: !DISABLED_TABLE_CODES.includes(t.tableCode),
   }))
 
   for (const table of tables) {
@@ -201,7 +202,9 @@ export function getAvailability(params: GetAvailabilityParams): AvailabilityResu
 
 export function isDateFullyBooked(allBookings: ExistingBooking[]): boolean {
   const minDur   = cfg.minDurationMinutes
-  const tables: TableDef[] = TABLE_DEFINITIONS.map(t => ({ ...t, isActive: true }))
+  const tables: TableDef[] = TABLE_DEFINITIONS.map(t => ({
+    ...t, isActive: !DISABLED_TABLE_CODES.includes(t.tableCode),
+  }))
 
   const bookingsByTable = new Map<string, ExistingBooking[]>()
   for (const b of allBookings) {
