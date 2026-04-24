@@ -186,10 +186,9 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`.trim()
 
-      sendEmail({ to: email, subject, html }).then(r => {
-        if (!r.ok) console.error('[admin booking] 邮件发送失败:', r.error)
-        else console.log('[admin booking] 邮件已发送, messageId:', r.messageId)
-      }).catch(e => console.error('[admin booking] 邮件异常:', e))
+      const emailResult = await sendEmail({ to: email, subject, html })
+      if (!emailResult.ok) console.error('[admin booking] 邮件发送失败:', emailResult.error)
+      else console.log('[admin booking] 邮件已发送, messageId:', emailResult.messageId)
     }
 
     return NextResponse.json({ bookingId: booking.booking_id, tableCode }, { status: 201 })
