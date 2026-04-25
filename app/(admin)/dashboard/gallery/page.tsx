@@ -388,115 +388,93 @@ export default function GalleryAdminPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* 展示图库专区 */}
-            {items.some(i => i.category === '展示图库') && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Home size={14} className="text-terracotta" />
-                  <span className="text-sm font-semibold text-charcoal">首页展示图库</span>
-                  <span className={cn(
-                    'rounded-full px-2 py-0.5 text-xs font-medium',
-                    featuredFull ? 'bg-red-100 text-red-600' : 'bg-terracotta/10 text-terracotta'
-                  )}>
-                    {featuredCount}/4
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  {items.filter(i => i.category === '展示图库').map(item => (
-                    <div key={item.id} className="group relative card overflow-hidden aspect-square">
-                      <Image
-                        src={item.storage_path}
-                        alt={item.alt_text ?? item.category}
-                        fill
-                        className="object-cover"
-                        sizes="200px"
-                      />
-                      <div className={cn(
-                        'absolute inset-0 bg-black/0 transition-all duration-200',
-                        deletingId === item.id ? 'bg-black/50' : 'group-hover:bg-black/40'
-                      )} />
-                      <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-terracotta/90 px-2 py-0.5 text-[10px] text-white font-medium">
-                        <Home size={9} />
-                        首页展示
-                      </div>
-                      {deletingId !== item.id && (
-                        <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                          <button onClick={() => setEditingItem(item)} className="p-2 rounded-xl bg-white/90 text-charcoal hover:bg-white shadow-sm" title="编辑">
-                            <Pencil size={14} />
-                          </button>
-                          <button onClick={() => handleDelete(item.id)} className="p-2 rounded-xl bg-red-500 text-white hover:bg-red-600 shadow-sm" title="删除">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+          <div className="space-y-8">
+            {/* 按分类分组：展示图库置顶，其余按出现顺序 */}
+            {['展示图库', ...Array.from(new Set(items.map(i => i.category))).filter(c => c !== '展示图库')]
+              .filter(cat => items.some(i => i.category === cat))
+              .map(cat => {
+                const catItems   = items.filter(i => i.category === cat)
+                const isFeatured = cat === '展示图库'
+                return (
+                  <div key={cat}>
+                    {/* 分类标题 */}
+                    <div className="flex items-center gap-2 mb-3">
+                      {isFeatured
+                        ? <Home size={14} className="text-terracotta" />
+                        : <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" />}
+                      <span className="text-sm font-semibold text-charcoal">
+                        {isFeatured ? '首页展示图库' : cat}
+                      </span>
+                      {isFeatured ? (
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-xs font-medium',
+                          featuredFull ? 'bg-red-100 text-red-600' : 'bg-terracotta/10 text-terracotta'
+                        )}>
+                          {featuredCount}/4
+                        </span>
+                      ) : (
+                        <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-stone-100 text-stone-500">
+                          {catItems.length} 张
+                        </span>
                       )}
-                      {deletingId === item.id && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Loader2 size={22} className="text-white animate-spin" />
-                        </div>
-                      )}
-                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                        {item.alt_text && <p className="text-white text-xs font-medium truncate">{item.alt_text}</p>}
-                      </div>
                     </div>
-                  ))}
-                  {/* 空位占位格 */}
-                  {Array.from({ length: 4 - featuredCount }).map((_, idx) => (
-                    <div key={`empty-${idx}`} className="aspect-square rounded-2xl border-2 border-dashed border-sand-200 flex items-center justify-center text-charcoal-light/40">
-                      <div className="text-center">
-                        <div className="text-2xl mb-1">＋</div>
-                        <p className="text-xs">空位</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* 其他图片 */}
-            {items.some(i => i.category !== '展示图库') && (
-              <div>
-                {items.some(i => i.category === '展示图库') && (
-                  <p className="text-sm font-semibold text-charcoal mb-3">其他图片</p>
-                )}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {items.filter(i => i.category !== '展示图库').map(item => (
-                    <div key={item.id} className="group relative card overflow-hidden aspect-square">
-                      <Image
-                        src={item.storage_path}
-                        alt={item.alt_text ?? item.category}
-                        fill
-                        className="object-cover"
-                        sizes="200px"
-                      />
-                      <div className={cn(
-                        'absolute inset-0 bg-black/0 transition-all duration-200',
-                        deletingId === item.id ? 'bg-black/50' : 'group-hover:bg-black/40'
-                      )} />
-                      {deletingId !== item.id && (
-                        <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                          <button onClick={() => setEditingItem(item)} className="p-2 rounded-xl bg-white/90 text-charcoal hover:bg-white shadow-sm" title="编辑">
-                            <Pencil size={14} />
-                          </button>
-                          <button onClick={() => handleDelete(item.id)} className="p-2 rounded-xl bg-red-500 text-white hover:bg-red-600 shadow-sm" title="删除">
-                            <Trash2 size={14} />
-                          </button>
+                    {/* 图片网格 */}
+                    <div className={cn(
+                      'grid gap-4',
+                      isFeatured
+                        ? 'grid-cols-2 sm:grid-cols-4'
+                        : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
+                    )}>
+                      {catItems.map(item => (
+                        <div key={item.id} className="group relative card overflow-hidden aspect-square">
+                          <Image
+                            src={item.storage_path}
+                            alt={item.alt_text ?? item.category}
+                            fill className="object-cover" sizes="200px"
+                          />
+                          <div className={cn(
+                            'absolute inset-0 bg-black/0 transition-all duration-200',
+                            deletingId === item.id ? 'bg-black/50' : 'group-hover:bg-black/40'
+                          )} />
+                          {isFeatured && (
+                            <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-terracotta/90 px-2 py-0.5 text-[10px] text-white font-medium">
+                              <Home size={9} /> 首页展示
+                            </div>
+                          )}
+                          {deletingId !== item.id && (
+                            <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <button onClick={() => setEditingItem(item)} className="p-2 rounded-xl bg-white/90 text-charcoal hover:bg-white shadow-sm" title="编辑">
+                                <Pencil size={14} />
+                              </button>
+                              <button onClick={() => handleDelete(item.id)} className="p-2 rounded-xl bg-red-500 text-white hover:bg-red-600 shadow-sm" title="删除">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
+                          {deletingId === item.id && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Loader2 size={22} className="text-white animate-spin" />
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
+                            {item.alt_text && <p className="text-white text-xs font-medium truncate">{item.alt_text}</p>}
+                          </div>
                         </div>
-                      )}
-                      {deletingId === item.id && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Loader2 size={22} className="text-white animate-spin" />
+                      ))}
+                      {/* 展示图库空位占位格 */}
+                      {isFeatured && Array.from({ length: 4 - featuredCount }).map((_, idx) => (
+                        <div key={`empty-${idx}`} className="aspect-square rounded-2xl border-2 border-dashed border-sand-200 flex items-center justify-center text-charcoal-light/40">
+                          <div className="text-center">
+                            <div className="text-2xl mb-1">＋</div>
+                            <p className="text-xs">空位</p>
+                          </div>
                         </div>
-                      )}
-                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                        {item.alt_text && <p className="text-white text-xs font-medium truncate">{item.alt_text}</p>}
-                        <span className="inline-block rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] text-white/80 mt-0.5">{item.category}</span>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                )
+              })}
           </div>
         )}
       </div>
