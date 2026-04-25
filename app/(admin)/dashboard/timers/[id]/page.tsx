@@ -123,9 +123,22 @@ export default function AdminTimerDetailPage() {
   return (
     <div className="max-w-lg mx-auto p-4 md:p-6 space-y-4">
       {/* Back */}
-      <button onClick={() => router.push('/dashboard/timers')} className="text-sm text-stone-400 hover:text-stone-600 flex items-center gap-1">
-        ← 返回计时列表
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={() => router.push('/dashboard/timers')} className="text-sm text-stone-400 hover:text-stone-600 flex items-center gap-1">
+          ← 返回计时列表
+        </button>
+        <button
+          onClick={async () => {
+            if (!confirm(`确认删除订单 ${session.session_id}？此操作不可撤销。`)) return
+            const res = await fetch(`/api/admin/timers/${id}`, { method: 'DELETE' })
+            if (res.ok) router.push('/dashboard/timers')
+            else alert('删除失败，请重试')
+          }}
+          className="text-xs text-red-400 hover:text-red-600 transition"
+        >
+          删除订单
+        </button>
+      </div>
 
       {/* Title */}
       <div className="flex items-start justify-between">

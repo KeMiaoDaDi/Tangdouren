@@ -28,7 +28,29 @@ export async function GET(
   return NextResponse.json({ session: data })
 }
 
-export async function PATCH(
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: '未授权' }, { status: 401 })
+
+  const { id } = await params
+  const admin  = createAdminClient()
+
+  const { error } = await admin
+    .from('timer_sessions')
+    .delete()
+    .eq('session_id', id)
+
+  if (error) {
+    console.error('[DELETE /api/admin/timers]', error)
+    return NextResponse.json({ error: '删除失败' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
