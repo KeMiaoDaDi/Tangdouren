@@ -2,21 +2,22 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import { Upload, Trash2, Pencil, X, Check, AlertCircle, Loader2, Home } from 'lucide-react'
+import { Upload, Trash2, Pencil, X, Check, AlertCircle, Loader2, Home, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { GALLERY_CATEGORIES } from '@/components/site/GalleryGrid'
 import type { GalleryItem } from '@/components/site/GalleryGrid'
 
-const UPLOAD_CATEGORIES = GALLERY_CATEGORIES.filter(c => c !== '全部')
+const BASE_CATEGORIES = ['展示图库']
 
 // ── 编辑弹层 ─────────────────────────────────────────────────────────────────
 
 function EditModal({
   item,
+  categories,
   onClose,
   onSave,
 }: {
   item: GalleryItem
+  categories: string[]
   onClose: () => void
   onSave: (id: string, alt: string, cat: string) => Promise<void>
 }) {
@@ -58,7 +59,7 @@ function EditModal({
         <div>
           <label className="label">分类</label>
           <select className="input-field" value={cat} onChange={e => setCat(e.target.value)}>
-            {UPLOAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
@@ -81,11 +82,42 @@ export default function GalleryAdminPage() {
   const [loading,    setLoading]   = useState(true)
   const [error,      setError]     = useState('')
 
+  // 自定义分类（持久化到 localStorage）
+  const [extraCats,  setExtraCats] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('gallery_extra_cats') ?? '[]') } catch { return [] }
+  })
+  const [newCatInput, setNewCatInput] = useState('')
+
+  // 所有可用分类：固定 + 已有图片中的 + 手动添加的
+  const allCategories = Array.from(new Set([
+    ...BASE_CATEGORIES,
+    ...items.map(i => i.category),
+    ...extraCats,
+  ]))
+
+  function addCategory() {
+    const name = newCatInput.trim()
+    if (!name || allCategories.includes(name)) { setNewCatInput(''); return }
+    const next = [...extraCats, name]
+    setExtraCats(next)
+    localStorage.setItem('gallery_extra_cats', JSON.stringify(next))
+    setUploadCat(name)
+    setNewCatInput('')
+  }
+
+  function removeExtraCat(cat: string) {
+    const next = extraCats.filter(c => c !== cat)
+    setExtraCats(next)
+    localStorage.setItem('gallery_extra_cats', JSON.stringify(next))
+    if (uploadCat === cat) setUploadCat(BASE_CATEGORIES[0])
+  }
+
   // 上传状态
   const [preview,    setPreview]   = useState<string | null>(null)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadAlt,  setUploadAlt] = useState('')
-  const [uploadCat,  setUploadCat] = useState('其他')
+  const [uploadCat,  setUploadCat] = useState('展示图库')
   const [uploading,  setUploading] = useState(false)
   const [uploadErr,  setUploadErr] = useState('')
 
@@ -133,7 +165,7 @@ export default function GalleryAdminPage() {
     setUploadFile(null)
     setPreview(null)
     setUploadAlt('')
-    setUploadCat('其他')
+    setUploadCat('展示图库')
     setUploadErr('')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -201,6 +233,52 @@ export default function GalleryAdminPage() {
         <p className="text-sm text-charcoal-light mt-0.5">管理前台展示的作品图片</p>
       </div>
 
+      {/* 分类管理 */}
+      <div className="card p-5">
+        <h2 className="font-semibold text-charcoal text-sm mb-3">分类管理</h2>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {/* 固定分类（不可删） */}
+          <span className="inline-flex items-center gap-1 rounded-full bg-terracotta/10 text-terracotta px-3 py-1 text-xs font-medium">
+            <Home size={11} /> 展示图库
+          </span>
+          {/* 从图片中派生的非固定分类 */}
+          {Array.from(new Set(items.map(i => i.category)))
+            .filter(c => !BASE_CATEGORIES.includes(c) && !extraCats.includes(c))
+            .map(c => (
+              <span key={c} className="inline-flex items-center gap-1 rounded-full bg-stone-100 text-stone-600 px-3 py-1 text-xs font-medium">
+                {c}
+              </span>
+            ))}
+          {/* 手动添加的分类（可删） */}
+          {extraCats.map(c => (
+            <span key={c} className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-600 px-3 py-1 text-xs font-medium">
+              {c}
+              <button onClick={() => removeExtraCat(c)} className="hover:text-red-500 transition">
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+        {/* 新增分类 */}
+        <div className="flex gap-2">
+          <input
+            value={newCatInput}
+            onChange={e => setNewCatInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addCategory()}
+            placeholder="输入新分类名称，回车确认"
+            className="flex-1 border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta/30"
+          />
+          <button
+            onClick={addCategory}
+            disabled={!newCatInput.trim()}
+            className="flex items-center gap-1 px-3 py-2 bg-terracotta text-white rounded-xl text-sm font-medium hover:bg-terracotta/90 disabled:opacity-40 transition"
+          >
+            <Plus size={14} /> 添加
+          </button>
+        </div>
+        <p className="text-xs text-stone-400 mt-1.5">蓝色标签为自定义分类，点 × 可移除（不影响已分配的图片）</p>
+      </div>
+
       {/* 上传区 */}
       <div className="card p-6">
         <h2 className="font-semibold text-charcoal text-sm mb-4">上传新作品</h2>
@@ -234,7 +312,7 @@ export default function GalleryAdminPage() {
                 <div>
                   <label className="label">分类</label>
                   <select className="input-field" value={uploadCat} onChange={e => setUploadCat(e.target.value)}>
-                    {UPLOAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   {uploadCat === '展示图库' && (
                     <p className={cn(
@@ -302,7 +380,8 @@ export default function GalleryAdminPage() {
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-12 text-charcoal-light">
-            <div className="text-4xl mb-3">🫘</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="" className="w-12 h-12 rounded-xl object-cover mx-auto mb-3 opacity-40" />
             <p className="text-sm">暂无图片，请先上传</p>
             <p className="text-xs mt-1 text-charcoal-light/60">
               提示：需先在 Supabase 控制台创建名为「gallery」的 Public Bucket
@@ -426,6 +505,7 @@ export default function GalleryAdminPage() {
       {editingItem && (
         <EditModal
           item={editingItem}
+          categories={allCategories}
           onClose={() => setEditingItem(null)}
           onSave={handleSaveEdit}
         />

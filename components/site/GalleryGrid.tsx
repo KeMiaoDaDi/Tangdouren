@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 
-export const GALLERY_CATEGORIES = ['全部', '展示图库', '动物系列', '风景系列', '美食系列', '宠物定制', '卡通人物', '其他']
+export const GALLERY_CATEGORIES = ['全部', '展示图库']
 
 export interface GalleryItem {
   id: string
@@ -24,8 +24,10 @@ export default function GalleryGrid({ items }: GalleryGridProps) {
     ? items
     : items.filter(i => i.category === activeCategory)
 
-  // 只显示实际有图片的分类（+ 全部）
-  const usedCategories = ['全部', ...Array.from(new Set(items.map(i => i.category)))]
+  // 动态派生分类：全部 → 展示图库（置顶）→ 其余按出现顺序
+  const usedCategories = ['全部', ...Array.from(new Set(
+    ['展示图库', ...items.map(i => i.category)]
+  )).filter(c => c === '展示图库' || items.some(i => i.category === c))]
 
   return (
     <>
@@ -33,7 +35,7 @@ export default function GalleryGrid({ items }: GalleryGridProps) {
       <section className="sticky top-16 z-30 bg-white/90 backdrop-blur-md border-b border-sand-100 py-3">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {GALLERY_CATEGORIES.filter(c => usedCategories.includes(c)).map((cat) => (
+            {usedCategories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActive(cat)}
