@@ -85,9 +85,17 @@ export async function PATCH(
     const billingMinutes = calcBillingMinutes(elapsedMinutes)
     const bill           = calcBill(billingMinutes)
 
-    // 固定汇率 GBP → CNY = 9
-    const exchangeRate = 9
-    const amountCny    = parseFloat((bill.totalGbp * exchangeRate).toFixed(2))
+    // 获取实时汇率（GBP → CNY）
+    let exchangeRate: number | null = null
+    let amountCny:    number | null = null
+    try {
+      const rateRes  = await fetch('https://api.frankfurter.app/latest?from=GBP&to=CNY', { next: { revalidate: 3600 } })
+      const rateData = await rateRes.json() as { rates: { CNY: number } }
+      exchangeRate   = rateData.rates.CNY
+      amountCny      = parseFloat((bill.totalGbp * exchangeRate).toFixed(2))
+    } catch {
+      console.warn('[timer stop] 汇率获取失败，跳过人民币换算')
+    }
 
     update = {
       status:          'completed',
