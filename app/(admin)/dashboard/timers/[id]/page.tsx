@@ -1,0 +1,259 @@
+'use client'
+
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { formatHMS, formatChineseDuration, calcBillingMinutes, calcBill, TIMER_PRICING } from '@/lib/timer/pricing'
+
+interface TimerSession {
+  session_id:       string
+  booking_id:       string | null
+  customer_name:    string
+  status:           'running' | 'paused' | 'completed'
+  started_at:       string
+  paused_at:        string | null
+  total_paused_ms:  number
+  stopped_at:       string | null
+  elapsed_minutes:  number | null
+  billing_minutes:  number | null
+  amount_gbp:       number | null
+  amount_cny:       number | null
+  exchange_rate:    number | null
+  bill_breakdown:   { label: string; amount: number }[] | null
+  created_by:       string | null
+}
+
+function calcElapsed(session: TimerSession): number {
+  if (session.status === 'completed' && session.elapsed_minutes !== null) return session.elapsed_minutes * 60
+  const started     = new Date(session.started_at).getTime()
+  const totalPaused = session.total_paused_ms ?? 0
+  if (session.status === 'paused' && session.paused_at) {
+    return Math.max(0, (new Date(session.paused_at).getTime() - started - totalPaused) / 1000)
+  }
+  return Math.max(0, (Date.now() - started - totalPaused) / 1000)
+}
+
+export default function AdminTimerDetailPage() {
+  const { id }                = useParams<{ id: string }>()
+  const router                = useRouter()
+  const [session, setSession] = useState<TimerSession | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [acting, setActing]   = useState(false)
+  const [error, setError]     = useState('')
+  const tickRef               = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchSession = useCallback(async () => {
+    const res  = await fetch(`/api/admin/timers/${id}`)
+    if (!res.ok) { setError('找不到计时订单'); setLoading(false); return }
+    const data = await res.json() as { session: TimerSession }
+    setSession(data.session)
+    setElapsed(calcElapsed(data.session))
+    setLoading(false)
+  }, [id])
+
+  useEffect(() => { fetchSession() }, [fetchSession])
+
+  useEffect(() => {
+    if (tickRef.current) clearInterval(tickRef.current)
+    if (session?.status === 'running') {
+      tickRef.current = setInterval(() => setElapsed(calcElapsed(session)), 1000)
+    }
+    return () => { if (tickRef.current) clearInterval(tickRef.current) }
+  }, [session])
+
+  async function doAction(action: 'pause' | 'resume' | 'stop') {
+    if (action === 'stop' && !confirm('确认结束计时？系统将自动计算账单。')) return
+    setActing(true)
+    const res  = await fetch(`/api/admin/timers/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    })
+    const data = await res.json() as { session?: TimerSession; error?: string }
+    if (!res.ok) { alert(data.error ?? '操作失败'); setActing(false); return }
+    setSession(data.session!)
+    setElapsed(calcElapsed(data.session!))
+    setActing(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center text-stone-400">
+          <div className="text-3xl mb-2 animate-spin">⏱</div>加载中…
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !session) {
+    return (
+      <div className="p-6 text-center text-stone-400">
+        <p>{error || '计时订单不存在'}</p>
+        <button onClick={() => router.push('/dashboard/timers')} className="mt-4 text-sm text-terracotta hover:underline">
+          ← 返回列表
+        </button>
+      </div>
+    )
+  }
+
+  const isCompleted = session.status === 'completed'
+  const isPaused    = session.status === 'paused'
+  const isRunning   = session.status === 'running'
+
+  const liveBillingMin = calcBillingMinutes(Math.floor(elapsed / 60))
+  const liveBill       = calcBill(liveBillingMin)
+
+  const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.tangdouren.co.uk'
+  const shareUrl = `${appUrl}/timer/${session.session_id}`
+
+  const statusColors: Record<string, string> = {
+    running:   'bg-emerald-100 text-emerald-700',
+    paused:    'bg-amber-100 text-amber-700',
+    completed: 'bg-stone-100 text-stone-500',
+  }
+  const statusLabels: Record<string, string> = {
+    running: '计时中', paused: '已暂停', completed: '已完成',
+  }
+
+  return (
+    <div className="max-w-lg mx-auto p-4 md:p-6 space-y-4">
+      {/* Back */}
+      <button onClick={() => router.push('/dashboard/timers')} className="text-sm text-stone-400 hover:text-stone-600 flex items-center gap-1">
+        ← 返回计时列表
+      </button>
+
+      {/* Title */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-stone-800">{session.session_id}</h1>
+          <p className="text-sm text-stone-500 mt-0.5">{session.customer_name}</p>
+        </div>
+        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[session.status]}`}>
+          {statusLabels[session.status]}
+        </span>
+      </div>
+
+      {/* Elapsed time */}
+      <div className={`rounded-3xl p-6 text-center ${isCompleted ? 'bg-gradient-to-br from-green-50 to-emerald-100' : isPaused ? 'bg-gradient-to-br from-amber-50 to-orange-100' : 'bg-gradient-to-br from-rose-50 to-terracotta/10'}`}>
+        <p className="text-stone-400 text-xs mb-1">{isCompleted ? '实际用时' : isPaused ? '暂停时已用时' : '已用时'}</p>
+        <p className="text-5xl font-mono font-bold text-stone-800 tracking-wider tabular-nums">
+          {formatHMS(elapsed)}
+        </p>
+        <p className="text-stone-500 text-sm mt-1">{formatChineseDuration(elapsed)}</p>
+        {!isCompleted && (
+          <p className="text-xs text-stone-400 mt-2">
+            计费时长：{liveBillingMin} min → <span className="font-semibold text-terracotta">£{liveBill.totalGbp.toFixed(2)}</span>（预估）
+          </p>
+        )}
+      </div>
+
+      {/* Controls */}
+      {!isCompleted && (
+        <div className="flex gap-3">
+          {isRunning && (
+            <button
+              onClick={() => doAction('pause')}
+              disabled={acting}
+              className="flex-1 py-3 rounded-2xl border-2 border-amber-300 text-amber-600 font-semibold text-sm hover:bg-amber-50 disabled:opacity-50 transition"
+            >
+              ⏸ 暂停计时
+            </button>
+          )}
+          {isPaused && (
+            <button
+              onClick={() => doAction('resume')}
+              disabled={acting}
+              className="flex-1 py-3 rounded-2xl border-2 border-emerald-300 text-emerald-600 font-semibold text-sm hover:bg-emerald-50 disabled:opacity-50 transition"
+            >
+              ▶ 继续计时
+            </button>
+          )}
+          <button
+            onClick={() => doAction('stop')}
+            disabled={acting}
+            className="flex-1 py-3 rounded-2xl bg-terracotta text-white font-semibold text-sm hover:bg-terracotta/90 disabled:opacity-50 transition shadow-sm"
+          >
+            ⏹ 结束计时
+          </button>
+        </div>
+      )}
+
+      {/* Final bill */}
+      {isCompleted && session.bill_breakdown && (
+        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4">
+          <p className="text-xs font-medium text-stone-400 uppercase mb-3">最终账单</p>
+          {session.bill_breakdown.map((l, i) => (
+            <div key={i} className="flex justify-between py-1.5 border-b border-stone-100 last:border-0 text-sm">
+              <span className="text-stone-600">{l.label}</span>
+              <span className="font-medium">£{l.amount.toFixed(2)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between items-baseline pt-3 mt-1">
+            <span className="font-semibold text-stone-700">
+              合计（{session.billing_minutes} min）
+            </span>
+            <span className="text-2xl font-bold text-terracotta">£{session.amount_gbp?.toFixed(2)}</span>
+          </div>
+          {session.amount_cny && session.exchange_rate && (
+            <p className="text-xs text-stone-400 text-right mt-1">
+              ≈ ¥{session.amount_cny.toFixed(2)}（汇率 {session.exchange_rate.toFixed(4)}）
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Live bill preview (running) */}
+      {!isCompleted && (
+        <div className="bg-white rounded-2xl border border-stone-100 px-5 py-4">
+          <p className="text-xs font-medium text-stone-400 uppercase mb-2">实时账单预览</p>
+          {liveBill.lines.map((l, i) => (
+            <div key={i} className="flex justify-between py-1 text-sm text-stone-600">
+              <span>{l.label}</span><span className="font-medium">£{l.amount.toFixed(2)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between pt-2 mt-1 border-t border-stone-100">
+            <span className="text-sm font-semibold text-stone-700">预计合计</span>
+            <span className="text-lg font-bold text-terracotta">£{liveBill.totalGbp.toFixed(2)}</span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-400">
+            <span>首小时 £{TIMER_PRICING.firstHourGbp}</span>
+            <span>续时 £{TIMER_PRICING.continuationPerHourGbp}/h</span>
+            <span className="text-terracotta">2.5h套餐 £{TIMER_PRICING.package250hGbp}</span>
+            <span className="text-terracotta">4h套餐 £{TIMER_PRICING.package400hGbp}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Share link & QR */}
+      <div className="bg-white rounded-2xl border border-stone-100 px-5 py-4">
+        <p className="text-xs font-medium text-stone-400 uppercase mb-3">分享给顾客</p>
+        <div className="flex items-center gap-2 bg-stone-50 rounded-xl px-3 py-2 mb-3">
+          <span className="text-xs text-stone-500 break-all flex-1 font-mono">{shareUrl}</span>
+          <button
+            onClick={() => { navigator.clipboard.writeText(shareUrl); alert('链接已复制') }}
+            className="text-xs text-terracotta hover:underline shrink-0"
+          >
+            复制
+          </button>
+        </div>
+        <div className="flex justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(shareUrl)}&size=160x160&margin=8`}
+            alt="QR Code"
+            className="w-40 h-40 rounded-xl border border-stone-100"
+          />
+        </div>
+        <p className="text-center text-xs text-stone-400 mt-2">顾客扫码实时查看计时进度</p>
+      </div>
+
+      {/* Meta */}
+      <div className="text-xs text-stone-400 space-y-0.5 pb-4">
+        <p>开始时间：{new Date(session.started_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' })}</p>
+        {session.stopped_at && <p>结束时间：{new Date(session.stopped_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' })}</p>}
+        <p>操作员：{session.created_by ?? '—'}</p>
+      </div>
+    </div>
+  )
+}

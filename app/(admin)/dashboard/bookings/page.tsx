@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Search, Download, RefreshCw, CalendarDays, List, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TABLE_DEFINITIONS } from '@/lib/booking/config'
@@ -107,6 +108,7 @@ const TAB_STATUS_MAP: Record<string, string> = {
 }
 
 function ListView() {
+  const router = useRouter()
   const [tab,      setTab]      = useState('全部')
   const [search,   setSearch]   = useState('')
   const [selected, setSelected] = useState<string | null>(null)
@@ -159,6 +161,19 @@ function ListView() {
       if (selected === booking.booking_id) setSelected(null)
       await fetch_()
     } finally { setCancelLoading(false) }
+  }
+
+  async function startTimer(b: Booking) {
+    setSaving(true)
+    try {
+      const res  = await fetch('/api/admin/timers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: b.booking_id, customerName: b.customer_name }),
+      })
+      const data = await res.json() as { session?: { session_id: string }; error?: string }
+      if (!res.ok) { alert(data.error ?? '创建计时失败'); return }
+      router.push(`/dashboard/timers/${data.session!.session_id}`)
+    } finally { setSaving(false) }
   }
 
   function exportCSV() {
@@ -264,6 +279,8 @@ function ListView() {
                         <td className="px-4 py-3.5 text-right" onClick={e => e.stopPropagation()}>
                           {b.status === 'confirmed' && (
                             <div className="flex items-center justify-end gap-1">
+                              <button disabled={saving} onClick={() => startTimer(b)}
+                                className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-100 font-medium disabled:opacity-50">⏱ 计时</button>
                               <button disabled={saving} onClick={() => markCompleted(b.booking_id)}
                                 className="rounded-lg bg-sage/10 px-2.5 py-1 text-xs text-sage-dark hover:bg-sage/20 font-medium disabled:opacity-50">✓ 完成</button>
                               <button disabled={saving} onClick={() => setCancelTarget(b)}
@@ -308,7 +325,11 @@ function ListView() {
               ))}
             </div>
             {detail.status === 'confirmed' && (
-              <div className="mt-5 pt-4 border-t border-sand-100 flex gap-2">
+              <div className="mt-5 pt-4 border-t border-sand-100 flex gap-2 flex-wrap">
+                <button disabled={saving} onClick={() => startTimer(detail)}
+                  className="flex-1 rounded-xl bg-blue-50 py-2 text-sm text-blue-600 font-medium hover:bg-blue-100 disabled:opacity-50">
+                  ⏱ 开始计时
+                </button>
                 <button disabled={saving} onClick={() => markCompleted(detail.booking_id)}
                   className="flex-1 rounded-xl bg-sage/10 py-2 text-sm text-sage-dark font-medium hover:bg-sage/20 disabled:opacity-50">
                   标记为已完成
