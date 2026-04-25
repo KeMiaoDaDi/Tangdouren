@@ -28,13 +28,14 @@ export default function Sidebar({ active }: { active: string }) {
 
   const NavContent = () => (
     <>
-      <div className="px-4 py-5 border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">🫘</span>
-          <span className="font-display text-base font-semibold text-white">糖豆人手工工作室</span>
+        <div className="px-4 py-5 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="logo" className="w-7 h-7 rounded-lg object-cover shrink-0" />
+            <span className="font-display text-base font-semibold text-white">糖豆人手工工作室</span>
+          </div>
+          <p className="text-xs text-white/40 mt-0.5">后台管理系统</p>
         </div>
-        <p className="text-xs text-white/40 mt-0.5">后台管理系统</p>
-      </div>
 
       <nav className="flex-1 p-3 space-y-1">
         {navItems.map(({ href, icon: Icon, label }) => (
@@ -74,9 +75,10 @@ export default function Sidebar({ active }: { active: string }) {
       {/* Mobile header */}
       <div className="md:hidden fixed top-0 inset-x-0 z-40 bg-charcoal flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
-          <span>🫘</span>
-          <span className="font-display text-sm font-semibold text-white">拼豆工作室后台</span>
-        </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="logo" className="w-6 h-6 rounded-md object-cover shrink-0" />
+            <span className="font-display text-sm font-semibold text-white">拼豆工作室后台</span>
+          </div>
         <button onClick={() => setOpen(!open)} className="text-white/70 hover:text-white">
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>

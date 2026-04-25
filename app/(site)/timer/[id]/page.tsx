@@ -87,7 +87,8 @@ export default function TimerPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-4xl mb-4 animate-bounce">🫘</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" className="w-14 h-14 rounded-2xl object-cover mx-auto mb-4 animate-bounce shadow-sm" />
           <p className="text-stone-500">加载中…</p>
         </div>
       </div>
