@@ -213,7 +213,7 @@ export default async function HomePage() {
                 {[
                   { icon: MapPin,  label: '地址', value: 'Unit 226, 65-75 Whitechapel Road, London E1 1DU' },
                   { icon: Clock,   label: '营业时间', value: '周二至周日 11:00 – 21:00 (GMT/BST)' },
-                  { icon: Users,   label: '预定人数', value: '1 - 4 人自由选择' },
+                  { icon: Users,   label: '联系方式', value: '扫描右侧二维码添加客服微信' },
                 ].map(({ icon: Icon, label, value }) => (
                   <li key={label} className="flex items-start gap-3">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-terracotta/10">
@@ -233,23 +233,17 @@ export default async function HomePage() {
               </Link>
             </div>
 
-            {/* Map placeholder */}
-            <div className="relative h-72 lg:h-96 rounded-2xl overflow-hidden bg-gradient-to-br from-sand-100 to-warm-200 flex items-center justify-center">
-              <div className="text-center px-6">
-                <div className="text-6xl mb-3">📍</div>
-                <p className="font-semibold text-charcoal">Google Map 搜索：</p>
-                <p className="text-charcoal text-lg font-bold mt-2">糖豆人手作</p>
-                <p className="text-xl mt-1 text-red-500">❤</p>
-                <a
-                  href="https://maps.google.com/?q=65-75+Whitechapel+Road+London+E1+1DU"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-block text-xs text-terracotta hover:underline"
-                >
-                  在 Google Maps 查看 →
-                </a>
+            {/* 客服二维码 */}
+            <div className="flex flex-col items-center justify-center gap-4">
+              <div className="relative w-72 h-72 sm:w-80 sm:h-80 lg:w-96 lg:h-96 rounded-2xl overflow-hidden shadow-warm-lg border border-sand-200">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/客服二维码.jpg"
+                  alt="客服二维码"
+                  className="w-full h-full object-contain bg-white"
+                />
               </div>
-              <div className="absolute inset-0 border-2 border-dashed border-sand-200 rounded-2xl m-4 opacity-40 pointer-events-none" />
+              <p className="text-sm text-charcoal-light">扫码添加客服微信，随时咨询预约</p>
             </div>
           </div>
         </div>
