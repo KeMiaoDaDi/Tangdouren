@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { calcBillingMinutes, calcBill } from '@/lib/timer/pricing'
 
-type Action = 'pause' | 'resume' | 'stop'
+type Action = 'start' | 'pause' | 'resume' | 'stop'
 
 export async function GET(
   _req: NextRequest,
@@ -40,7 +40,7 @@ export async function PATCH(
   const body     = await request.json() as { action: Action }
   const { action } = body
 
-  if (!['pause', 'resume', 'stop'].includes(action)) {
+  if (!['start', 'pause', 'resume', 'stop'].includes(action)) {
     return NextResponse.json({ error: '无效操作' }, { status: 400 })
   }
 
@@ -58,7 +58,11 @@ export async function PATCH(
   const now    = new Date()
   let update: Record<string, unknown> = {}
 
-  if (action === 'pause') {
+  if (action === 'start') {
+    if (session.status !== 'idle') return NextResponse.json({ error: '计时已开始' }, { status: 409 })
+    update = { status: 'running', started_at: now.toISOString() }
+
+  } else if (action === 'pause') {
     if (session.status !== 'running') return NextResponse.json({ error: '当前不在计时中' }, { status: 409 })
     update = { status: 'paused', paused_at: now.toISOString() }
 
@@ -74,6 +78,7 @@ export async function PATCH(
 
   } else {
     // stop
+    if (session.status === 'idle') return NextResponse.json({ error: '计时尚未开始' }, { status: 409 })
     // 计算实际用时（扣除暂停时间）
     let totalPausedMs = session.total_paused_ms ?? 0
     if (session.status === 'paused' && session.paused_at) {

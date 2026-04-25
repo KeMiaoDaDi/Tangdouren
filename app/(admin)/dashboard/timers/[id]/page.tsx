@@ -8,8 +8,8 @@ interface TimerSession {
   session_id:       string
   booking_id:       string | null
   customer_name:    string
-  status:           'running' | 'paused' | 'completed'
-  started_at:       string
+  status:           'idle' | 'running' | 'paused' | 'completed'
+  started_at:       string | null
   paused_at:        string | null
   total_paused_ms:  number
   stopped_at:       string | null
@@ -23,7 +23,9 @@ interface TimerSession {
 }
 
 function calcElapsed(session: TimerSession): number {
+  if (session.status === 'idle') return 0
   if (session.status === 'completed' && session.elapsed_minutes !== null) return session.elapsed_minutes * 60
+  if (!session.started_at) return 0
   const started     = new Date(session.started_at).getTime()
   const totalPaused = session.total_paused_ms ?? 0
   if (session.status === 'paused' && session.paused_at) {
@@ -61,7 +63,7 @@ export default function AdminTimerDetailPage() {
     return () => { if (tickRef.current) clearInterval(tickRef.current) }
   }, [session])
 
-  async function doAction(action: 'pause' | 'resume' | 'stop') {
+  async function doAction(action: 'start' | 'pause' | 'resume' | 'stop') {
     if (action === 'stop' && !confirm('确认结束计时？系统将自动计算账单。')) return
     setActing(true)
     const res  = await fetch(`/api/admin/timers/${id}`, {
@@ -97,6 +99,7 @@ export default function AdminTimerDetailPage() {
     )
   }
 
+  const isIdle      = session.status === 'idle'
   const isCompleted = session.status === 'completed'
   const isPaused    = session.status === 'paused'
   const isRunning   = session.status === 'running'
@@ -108,12 +111,13 @@ export default function AdminTimerDetailPage() {
   const shareUrl = `${appUrl}/timer/${session.session_id}`
 
   const statusColors: Record<string, string> = {
+    idle:      'bg-stone-100 text-stone-500',
     running:   'bg-emerald-100 text-emerald-700',
     paused:    'bg-amber-100 text-amber-700',
     completed: 'bg-stone-100 text-stone-500',
   }
   const statusLabels: Record<string, string> = {
-    running: '计时中', paused: '已暂停', completed: '已完成',
+    idle: '未开始', running: '计时中', paused: '已暂停', completed: '已完成',
   }
 
   return (
@@ -135,13 +139,13 @@ export default function AdminTimerDetailPage() {
       </div>
 
       {/* Elapsed time */}
-      <div className={`rounded-3xl p-6 text-center ${isCompleted ? 'bg-gradient-to-br from-green-50 to-emerald-100' : isPaused ? 'bg-gradient-to-br from-amber-50 to-orange-100' : 'bg-gradient-to-br from-rose-50 to-terracotta/10'}`}>
-        <p className="text-stone-400 text-xs mb-1">{isCompleted ? '实际用时' : isPaused ? '暂停时已用时' : '已用时'}</p>
+      <div className={`rounded-3xl p-6 text-center ${isCompleted ? 'bg-gradient-to-br from-green-50 to-emerald-100' : isPaused ? 'bg-gradient-to-br from-amber-50 to-orange-100' : isIdle ? 'bg-gradient-to-br from-stone-50 to-stone-100' : 'bg-gradient-to-br from-rose-50 to-terracotta/10'}`}>
+        <p className="text-stone-400 text-xs mb-1">{isCompleted ? '实际用时' : isPaused ? '暂停时已用时' : isIdle ? '等待开始' : '已用时'}</p>
         <p className="text-5xl font-mono font-bold text-stone-800 tracking-wider tabular-nums">
-          {formatHMS(elapsed)}
+          {isIdle ? '--:--:--' : formatHMS(elapsed)}
         </p>
-        <p className="text-stone-500 text-sm mt-1">{formatChineseDuration(elapsed)}</p>
-        {!isCompleted && (
+        <p className="text-stone-500 text-sm mt-1">{isIdle ? '点击「开始计时」启动' : formatChineseDuration(elapsed)}</p>
+        {!isCompleted && !isIdle && (
           <p className="text-xs text-stone-400 mt-2">
             计费时长：{liveBillingMin} min → <span className="font-semibold text-terracotta">£{liveBill.totalGbp.toFixed(2)}</span>（预估）
           </p>
@@ -151,6 +155,15 @@ export default function AdminTimerDetailPage() {
       {/* Controls */}
       {!isCompleted && (
         <div className="flex gap-3">
+          {isIdle && (
+            <button
+              onClick={() => doAction('start')}
+              disabled={acting}
+              className="flex-1 py-3 rounded-2xl bg-terracotta text-white font-semibold text-sm hover:bg-terracotta/90 disabled:opacity-50 transition shadow-sm"
+            >
+              ▶ 开始计时
+            </button>
+          )}
           {isRunning && (
             <button
               onClick={() => doAction('pause')}
@@ -169,13 +182,15 @@ export default function AdminTimerDetailPage() {
               ▶ 继续计时
             </button>
           )}
-          <button
-            onClick={() => doAction('stop')}
-            disabled={acting}
-            className="flex-1 py-3 rounded-2xl bg-terracotta text-white font-semibold text-sm hover:bg-terracotta/90 disabled:opacity-50 transition shadow-sm"
-          >
-            ⏹ 结束计时
-          </button>
+          {!isIdle && (
+            <button
+              onClick={() => doAction('stop')}
+              disabled={acting}
+              className="flex-1 py-3 rounded-2xl bg-terracotta text-white font-semibold text-sm hover:bg-terracotta/90 disabled:opacity-50 transition shadow-sm"
+            >
+              ⏹ 结束计时
+            </button>
+          )}
         </div>
       )}
 
@@ -250,7 +265,7 @@ export default function AdminTimerDetailPage() {
 
       {/* Meta */}
       <div className="text-xs text-stone-400 space-y-0.5 pb-4">
-        <p>开始时间：{new Date(session.started_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' })}</p>
+        <p>开始时间：{session.started_at ? new Date(session.started_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' }) : '未开始'}</p>
         {session.stopped_at && <p>结束时间：{new Date(session.stopped_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' })}</p>}
         <p>操作员：{session.created_by ?? '—'}</p>
       </div>

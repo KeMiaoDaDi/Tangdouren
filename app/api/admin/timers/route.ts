@@ -60,8 +60,7 @@ export async function POST(request: NextRequest) {
       session_id:    sessionId,
       booking_id:    bookingId ?? null,
       customer_name: resolvedName,
-      status:        'running',
-      started_at:    now,
+      status:        'idle',
       created_by:    user.email ?? user.id,
     })
     .select()

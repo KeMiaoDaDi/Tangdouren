@@ -8,7 +8,7 @@ import Sidebar from '@/components/admin/Sidebar'
 interface TimerSession {
   session_id:      string
   customer_name:   string
-  status:          'running' | 'paused' | 'completed'
+  status:          'idle' | 'running' | 'paused' | 'completed'
   started_at:      string
   stopped_at:      string | null
   elapsed_minutes: number | null
@@ -22,6 +22,7 @@ function calcLiveElapsed(s: TimerSession): number {
 }
 
 const statusMeta: Record<string, { label: string; color: string }> = {
+  idle:      { label: '未开始',   color: 'bg-stone-100 text-stone-500' },
   running:   { label: '计时中',   color: 'bg-emerald-100 text-emerald-700' },
   paused:    { label: '已暂停',   color: 'bg-amber-100 text-amber-700' },
   completed: { label: '已完成',   color: 'bg-stone-100 text-stone-500' },
@@ -31,7 +32,7 @@ export default function TimersListPage() {
   const router = useRouter()
   const [sessions, setSessions] = useState<TimerSession[]>([])
   const [loading, setLoading]   = useState(true)
-  const [filter, setFilter]     = useState<'all' | 'running' | 'paused' | 'completed'>('all')
+  const [filter, setFilter]     = useState<'all' | 'idle' | 'running' | 'paused' | 'completed'>('all')
   const [creating, setCreating] = useState(false)
   const [form, setForm]         = useState({ customerName: '' })
 
@@ -94,13 +95,13 @@ export default function TimersListPage() {
 
           {/* Filter */}
           <div className="flex gap-2">
-            {(['all', 'running', 'paused', 'completed'] as const).map(f => (
+            {(['all', 'idle', 'running', 'paused', 'completed'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition ${filter === f ? 'bg-terracotta text-white' : 'bg-white text-stone-500 border border-stone-200 hover:border-terracotta/40'}`}
               >
-                {{ all: '全部', running: '计时中', paused: '已暂停', completed: '已完成' }[f]}
+                {{ all: '全部', idle: '未开始', running: '计时中', paused: '已暂停', completed: '已完成' }[f]}
               </button>
             ))}
           </div>

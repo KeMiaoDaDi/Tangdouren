@@ -14,8 +14,8 @@ import {
 interface TimerSession {
   session_id:       string
   customer_name:    string
-  status:           'running' | 'paused' | 'completed'
-  started_at:       string
+  status:           'idle' | 'running' | 'paused' | 'completed'
+  started_at:       string | null
   paused_at:        string | null
   total_paused_ms:  number
   stopped_at:       string | null
@@ -28,9 +28,11 @@ interface TimerSession {
 }
 
 function calcElapsedSeconds(session: TimerSession): number {
+  if (session.status === 'idle') return 0
   if (session.status === 'completed' && session.elapsed_minutes !== null) {
     return session.elapsed_minutes * 60
   }
+  if (!session.started_at) return 0
   const started    = new Date(session.started_at).getTime()
   const totalPaused = session.total_paused_ms ?? 0
   if (session.status === 'paused' && session.paused_at) {
@@ -106,7 +108,8 @@ export default function TimerPage() {
 
   const isCompleted = session.status === 'completed'
   const isPaused    = session.status === 'paused'
-  const milestones  = isCompleted ? [] : getMilestones(elapsed)
+  const isIdle      = session.status === 'idle'
+  const milestones  = (isCompleted || isIdle) ? [] : getMilestones(elapsed)
 
   // 实时预估账单（顾客计时中参考用）
   const liveBillingMin = calcBillingMinutes(Math.floor(elapsed / 60))
@@ -118,23 +121,29 @@ export default function TimerPage() {
 
         {/* Header */}
         <div className="text-center mb-2">
-          <span className="text-3xl">🫘</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="糖豆人手工工作室" className="w-14 h-14 rounded-2xl object-cover mx-auto shadow-sm" />
           <p className="text-xs text-stone-400 mt-1">糖豆人手工工作室</p>
         </div>
 
         {/* Status card */}
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
-          <div className={`px-6 py-4 text-center ${isCompleted ? 'bg-gradient-to-r from-green-500 to-emerald-600' : isPaused ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gradient-to-r from-terracotta to-rose-600'}`}>
+          <div className={`px-6 py-4 text-center ${isCompleted ? 'bg-gradient-to-r from-green-500 to-emerald-600' : isPaused ? 'bg-gradient-to-r from-amber-400 to-orange-500' : isIdle ? 'bg-gradient-to-r from-stone-400 to-stone-500' : 'bg-gradient-to-r from-terracotta to-rose-600'}`}>
             <p className="text-white/80 text-xs mb-0.5">
               {session.customer_name} · {session.session_id}
             </p>
             <p className="text-white font-semibold text-sm">
-              {isCompleted ? '拼豆已完成 🎉' : isPaused ? '⏸ 暂时休息中' : '拼豆进行中 ✨'}
+              {isCompleted ? '拼豆已完成 🎉' : isPaused ? '⏸ 暂时休息中' : isIdle ? '⏳ 等待开始' : '拼豆进行中 ✨'}
             </p>
           </div>
 
           <div className="px-6 py-6 text-center">
-            {isCompleted ? (
+            {isIdle ? (
+              <div>
+                <p className="text-stone-400 text-sm">店员将为您开始计时</p>
+                <p className="text-stone-300 text-xs mt-1">请稍候…</p>
+              </div>
+            ) : isCompleted ? (
               /* 完成状态 */
               <div>
                 <p className="text-stone-400 text-xs mb-1">总用时</p>
