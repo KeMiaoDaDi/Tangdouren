@@ -48,6 +48,45 @@ export async function POST(request: NextRequest) {
 
 // ── GET /api/bookings — 后台预约列表（需登录） ────────────────────────────────
 
+// confirmed 预约超过结束时间 2 小时后自动标记为 completed
+async function autoCompleteExpired(admin: ReturnType<typeof createAdminClient>) {
+  try {
+    // 伦敦当前时间（用于比较）
+    const londonNow = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/London',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).format(new Date()).replace(' ', 'T')
+
+    // 取所有 confirmed 预约（只取需要的字段）
+    const { data: confirmed } = await admin
+      .from('bookings')
+      .select('booking_id, booking_date, end_time')
+      .eq('status', 'confirmed')
+
+    if (!confirmed || confirmed.length === 0) return
+
+    const toComplete: string[] = []
+    for (const b of confirmed) {
+      // 拼成完整时间字符串并加 2 小时
+      const endStr = `${b.booking_date}T${b.end_time.slice(0, 5)}:00`
+      const endMs  = new Date(endStr).getTime() + 2 * 60 * 60 * 1000
+      if (new Date(londonNow).getTime() >= endMs) {
+        toComplete.push(b.booking_id)
+      }
+    }
+
+    if (toComplete.length === 0) return
+
+    await admin
+      .from('bookings')
+      .update({ status: 'completed' })
+      .in('booking_id', toComplete)
+  } catch (e) {
+    console.error('[autoCompleteExpired]', e)
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -75,6 +114,9 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query
     if (error) throw error
+
+    // 惰性自动完成：confirmed 且 end_time + 2小时 < 当前伦敦时间 → 转为 completed
+    void autoCompleteExpired(adminSb)
 
     return NextResponse.json(data ?? [])
   } catch (err) {
