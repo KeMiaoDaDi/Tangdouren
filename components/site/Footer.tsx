@@ -9,7 +9,8 @@ export default function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-2xl">🫘</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="logo" className="w-8 h-8 rounded-lg object-cover shrink-0" />
               <span className="font-display text-lg font-semibold text-white">糖豆人手工工作室</span>
             </div>
             <p className="text-sm leading-relaxed text-white/60">
