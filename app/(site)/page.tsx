@@ -253,7 +253,7 @@ export default async function HomePage() {
                 <p className="text-charcoal text-lg font-bold mt-2">糖豆人手作</p>
                 <p className="text-xl mt-1 text-red-500">❤</p>
                 <a
-                  href="https://maps.google.com/?q=65-75+Whitechapel+Road+London+E1+1DU"
+                  href="https://maps.google.com/?q=糖豆人手作"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-4 inline-block text-xs text-terracotta hover:underline"

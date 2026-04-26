@@ -15,6 +15,7 @@ export interface ConfirmationEmailData {
   studioName:      string
   studioAddress:   string
   studioEmail:     string
+  studioMapUrl?:   string
 }
 
 export function buildConfirmationEmail(data: ConfirmationEmailData): {
@@ -25,6 +26,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
     customerName, bookingDate, startTime, endTime,
     tableDisplay, partySize, depositAmount, cancelUrl,
     studioName, studioAddress, studioEmail,
+    studioMapUrl = 'https://maps.google.com/?q=糖豆人手作',
   } = data
 
   const subject = `🎉 预约成功！${bookingDate} ${startTime} — ${studioName}`
@@ -84,7 +86,10 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
         </div>
         <div class="detail-row">
           <span class="detail-label">📍 地址</span>
-          <span class="detail-value">${studioAddress}</span>
+          <span class="detail-value">
+            ${studioAddress}<br />
+            <a href="${studioMapUrl}" style="font-size:12px;color:#D97059;font-weight:400;text-decoration:none;">📍 在 Google Maps 查看 →</a>
+          </span>
         </div>
       </div>
 

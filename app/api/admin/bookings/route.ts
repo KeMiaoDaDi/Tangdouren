@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
     if (email) {
       const studioName    = process.env.NEXT_PUBLIC_STUDIO_NAME  ?? '糖豆人手工工作室'
       const studioEmail   = process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk'
-      const studioAddress = process.env.NEXT_PUBLIC_STUDIO_ADDRESS ?? 'Algate East, London'
+      const studioAddress = 'Unit 226, 65-75 Whitechapel Road, London E1 1DU'
       const tableTypeNames: Record<string, string> = { single: '单人桌', double: '双人桌', four: '四人桌' }
       const tableDisplay  = `${tableTypeNames[tableRow.table_type] ?? tableRow.table_type} · ${tableCode}`
 
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
       <div class="row"><span class="lbl">⏰ 时间</span><span class="val">${startTime} – ${endTime}</span></div>
       <div class="row"><span class="lbl">🪑 桌位</span><span class="val">${tableDisplay}</span></div>
       <div class="row"><span class="lbl">👥 人数</span><span class="val">${effectivePartySize} 人</span></div>
-      <div class="row"><span class="lbl">📍 地址</span><span class="val">${studioAddress}</span></div>
+      <div class="row"><span class="lbl">📍 地址</span><span class="val">${studioAddress}<br/><a href="https://maps.google.com/?q=糖豆人手作" style="font-size:12px;color:#D97059;font-weight:400;text-decoration:none;">📍 在 Google Maps 查看 →</a></span></div>
     </div>
     <div class="note">
       如需修改或取消预约，请提前联系我们：<br/>
