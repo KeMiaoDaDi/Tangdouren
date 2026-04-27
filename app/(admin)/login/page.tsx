@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router   = useRouter()
-  const supabase = createClient()
+  const supabase = useRef(createClient()).current
 
   const [show,    setShow]    = useState(false)
   const [loading, setLoading] = useState(false)
@@ -24,19 +24,23 @@ export default function LoginPage() {
     }
 
     setLoading(true)
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email:    form.email,
-      password: form.password,
-    })
-    setLoading(false)
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email:    form.email.trim(),
+        password: form.password,
+      })
 
-    if (authError) {
-      setError('邮箱或密码错误，请重试')
-      return
+      if (authError) {
+        setError('邮箱或密码错误，请重试')
+        return
+      }
+
+      router.push('/dashboard')
+    } catch {
+      setError('网络错误，请检查连接后重试')
+    } finally {
+      setLoading(false)
     }
-
-    router.push('/dashboard')
-    router.refresh()
   }
 
   return (
