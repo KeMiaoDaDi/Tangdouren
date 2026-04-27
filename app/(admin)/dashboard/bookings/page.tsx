@@ -94,6 +94,154 @@ function CancelDialog({ booking, onClose, onConfirm, loading }: CancelDialogProp
   )
 }
 
+// ── 编辑预约弹窗 ──────────────────────────────────────────────────────────────
+interface EditDialogProps {
+  booking:  Booking
+  onClose:  () => void
+  onSaved:  () => void
+}
+function EditDialog({ booking, onClose, onSaved }: EditDialogProps) {
+  const [form, setForm] = useState({
+    booking_date:        booking.booking_date,
+    start_time:          booking.start_time,
+    end_time:            booking.end_time,
+    assigned_table_code: booking.assigned_table_code,
+    party_size:          booking.party_size,
+    remark:              booking.remark ?? '',
+    send_email:          false,
+  })
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+
+  function set<K extends keyof typeof form>(k: K, v: typeof form[K]) {
+    setForm(f => ({ ...f, [k]: v }))
+  }
+
+  async function handleSave() {
+    if (!form.booking_date || !form.start_time || !form.end_time) {
+      setError('日期和时间不能为空'); return
+    }
+    if (form.start_time >= form.end_time) {
+      setError('结束时间必须晚于开始时间'); return
+    }
+    setError('')
+    setLoading(true)
+    try {
+      const res  = await fetch(`/api/admin/bookings/${booking.booking_id}/edit`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_date:        form.booking_date,
+          start_time:          form.start_time,
+          end_time:            form.end_time,
+          assigned_table_code: form.assigned_table_code,
+          party_size:          form.party_size,
+          remark:              form.remark || null,
+          send_email:          form.send_email,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? '保存失败'); return }
+      onSaved()
+      onClose()
+    } catch {
+      setError('网络错误，请重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const inputCls = 'w-full rounded-xl border border-sand-200 bg-warm-50 px-3 py-2 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta'
+  const labelCls = 'block text-xs text-charcoal-light mb-1'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-fade-in my-auto">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-semibold text-charcoal">编辑预约</h3>
+          <button onClick={onClose} className="text-charcoal-light hover:text-charcoal text-xl leading-none">×</button>
+        </div>
+
+        <p className="text-xs text-charcoal-light mb-4 bg-warm-50 rounded-xl px-3 py-2">
+          正在编辑：<strong className="text-charcoal">{booking.customer_name}</strong> 的预约
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className={labelCls}>日期</label>
+            <input type="date" className={inputCls} value={form.booking_date}
+              onChange={e => set('booking_date', e.target.value)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>开始时间</label>
+              <input type="time" className={inputCls} value={form.start_time}
+                onChange={e => set('start_time', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>结束时间</label>
+              <input type="time" className={inputCls} value={form.end_time}
+                onChange={e => set('end_time', e.target.value)} />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>桌位</label>
+            <select className={inputCls} value={form.assigned_table_code}
+              onChange={e => set('assigned_table_code', e.target.value)}>
+              {TABLE_DEFINITIONS.map(t => (
+                <option key={t.tableCode} value={t.tableCode}>
+                  {t.tableCode}（{tableTypeLabel[t.tableType]}）
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelCls}>人数</label>
+            <select className={inputCls} value={form.party_size}
+              onChange={e => set('party_size', Number(e.target.value))}>
+              {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n} 人</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelCls}>备注</label>
+            <textarea rows={2} className={inputCls + ' resize-none'} placeholder="无"
+              value={form.remark}
+              onChange={e => set('remark', e.target.value)} />
+          </div>
+
+          {booking.email && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={form.send_email}
+                onChange={e => set('send_email', e.target.checked)}
+                className="rounded accent-terracotta" />
+              <span className="text-sm text-charcoal">发送修改通知邮件给客户</span>
+            </label>
+          )}
+
+          {error && (
+            <p className="text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{error}</p>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 rounded-xl border border-sand-200 py-2.5 text-sm text-charcoal-light hover:bg-warm-50 transition-colors disabled:opacity-50">
+            取消
+          </button>
+          <button onClick={handleSave} disabled={loading}
+            className="flex-1 rounded-xl bg-terracotta text-white py-2.5 text-sm font-medium hover:bg-terracotta-dark transition-colors disabled:opacity-50">
+            {loading ? '保存中…' : '保存修改'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // 时长（分钟）
 function durationMin(start: string, end: string) {
   const [sh, sm] = start.split(':').map(Number)
@@ -117,6 +265,7 @@ function ListView() {
   const [saving,   setSaving]   = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null)
   const [cancelLoading, setCancelLoading] = useState(false)
+  const [editTarget,   setEditTarget]   = useState<Booking | null>(null)
 
   const fetch_ = useCallback(async () => {
     setLoading(true)
@@ -220,6 +369,14 @@ function ListView() {
           loading={cancelLoading}
         />
       )}
+      {/* 编辑弹窗 */}
+      {editTarget && (
+        <EditDialog
+          booking={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={fetch_}
+        />
+      )}
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-sm text-charcoal-light">共 {bookings.length} 条记录</p>
@@ -292,6 +449,8 @@ function ListView() {
                         <td className="px-4 py-3.5 text-right" onClick={e => e.stopPropagation()}>
                           {b.status === 'confirmed' && (
                             <div className="flex items-center justify-end gap-1">
+                              <button disabled={saving} onClick={() => setEditTarget(b)}
+                                className="rounded-lg bg-warm-100 px-2.5 py-1 text-xs text-charcoal hover:bg-warm-200 font-medium disabled:opacity-50">✎ 编辑</button>
                               <button disabled={saving} onClick={() => startTimer(b)}
                                 className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-100 font-medium disabled:opacity-50">⏱ 计时</button>
                               <button disabled={saving} onClick={() => markCompleted(b.booking_id)}
@@ -301,8 +460,12 @@ function ListView() {
                             </div>
                           )}
                           {b.status === 'completed' && (
-                            <button disabled={saving} onClick={() => markConfirmed(b.booking_id)}
-                              className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-600 hover:bg-amber-100 font-medium disabled:opacity-50">↩ 恢复</button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button disabled={saving} onClick={() => setEditTarget(b)}
+                                className="rounded-lg bg-warm-100 px-2.5 py-1 text-xs text-charcoal hover:bg-warm-200 font-medium disabled:opacity-50">✎ 编辑</button>
+                              <button disabled={saving} onClick={() => markConfirmed(b.booking_id)}
+                                className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-600 hover:bg-amber-100 font-medium disabled:opacity-50">↩ 恢复</button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -341,28 +504,32 @@ function ListView() {
                 </div>
               ))}
             </div>
-            {detail.status === 'confirmed' && (
+            {(detail.status === 'confirmed' || detail.status === 'completed') && (
               <div className="mt-5 pt-4 border-t border-sand-100 flex gap-2 flex-wrap">
-                <button disabled={saving} onClick={() => startTimer(detail)}
-                  className="flex-1 rounded-xl bg-blue-50 py-2 text-sm text-blue-600 font-medium hover:bg-blue-100 disabled:opacity-50">
-                  ⏱ 开始计时
+                <button disabled={saving} onClick={() => setEditTarget(detail)}
+                  className="flex-1 rounded-xl bg-warm-100 py-2 text-sm text-charcoal font-medium hover:bg-warm-200 disabled:opacity-50">
+                  ✎ 编辑信息
                 </button>
-                <button disabled={saving} onClick={() => markCompleted(detail.booking_id)}
-                  className="flex-1 rounded-xl bg-sage/10 py-2 text-sm text-sage-dark font-medium hover:bg-sage/20 disabled:opacity-50">
-                  标记为已完成
-                </button>
-                <button disabled={saving} onClick={() => setCancelTarget(detail)}
-                  className="flex-1 rounded-xl bg-red-50 py-2 text-sm text-red-500 font-medium hover:bg-red-100 disabled:opacity-50">
-                  取消预约
-                </button>
-              </div>
-            )}
-            {detail.status === 'completed' && (
-              <div className="mt-5 pt-4 border-t border-sand-100">
-                <button disabled={saving} onClick={() => markConfirmed(detail.booking_id)}
-                  className="w-full rounded-xl bg-amber-50 py-2 text-sm text-amber-600 font-medium hover:bg-amber-100 disabled:opacity-50">
-                  ↩ 恢复为已确认
-                </button>
+                {detail.status === 'confirmed' && (<>
+                  <button disabled={saving} onClick={() => startTimer(detail)}
+                    className="flex-1 rounded-xl bg-blue-50 py-2 text-sm text-blue-600 font-medium hover:bg-blue-100 disabled:opacity-50">
+                    ⏱ 开始计时
+                  </button>
+                  <button disabled={saving} onClick={() => markCompleted(detail.booking_id)}
+                    className="flex-1 rounded-xl bg-sage/10 py-2 text-sm text-sage-dark font-medium hover:bg-sage/20 disabled:opacity-50">
+                    ✓ 标记完成
+                  </button>
+                  <button disabled={saving} onClick={() => setCancelTarget(detail)}
+                    className="flex-1 rounded-xl bg-red-50 py-2 text-sm text-red-500 font-medium hover:bg-red-100 disabled:opacity-50">
+                    取消预约
+                  </button>
+                </>)}
+                {detail.status === 'completed' && (
+                  <button disabled={saving} onClick={() => markConfirmed(detail.booking_id)}
+                    className="flex-1 rounded-xl bg-amber-50 py-2 text-sm text-amber-600 font-medium hover:bg-amber-100 disabled:opacity-50">
+                    ↩ 恢复已确认
+                  </button>
+                )}
               </div>
             )}
           </div>
