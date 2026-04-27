@@ -151,6 +151,19 @@ function ListView() {
     } finally { setSaving(false) }
   }
 
+  async function markConfirmed(id: string) {
+    if (!confirm('确认将此订单恢复为「已确认」状态？')) return
+    setSaving(true)
+    try {
+      await fetch(`/api/bookings/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'confirmed' }),
+      })
+      await fetch_()
+      if (selected === id) setSelected(null)
+    } finally { setSaving(false) }
+  }
+
   async function confirmCancel(booking: Booking) {
     setCancelLoading(true)
     try {
@@ -287,6 +300,10 @@ function ListView() {
                                 className="rounded-lg bg-red-50 px-2.5 py-1 text-xs text-red-500 hover:bg-red-100 font-medium disabled:opacity-50">✕ 取消</button>
                             </div>
                           )}
+                          {b.status === 'completed' && (
+                            <button disabled={saving} onClick={() => markConfirmed(b.booking_id)}
+                              className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-600 hover:bg-amber-100 font-medium disabled:opacity-50">↩ 恢复</button>
+                          )}
                         </td>
                       </tr>
                     )
@@ -340,6 +357,14 @@ function ListView() {
                 </button>
               </div>
             )}
+            {detail.status === 'completed' && (
+              <div className="mt-5 pt-4 border-t border-sand-100">
+                <button disabled={saving} onClick={() => markConfirmed(detail.booking_id)}
+                  className="w-full rounded-xl bg-amber-50 py-2 text-sm text-amber-600 font-medium hover:bg-amber-100 disabled:opacity-50">
+                  ↩ 恢复为已确认
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -383,6 +408,18 @@ function ScheduleView() {
       await fetch(`/api/bookings/${id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'completed' }),
+      })
+      await loadDay(date)
+    } finally { setSaving(false) }
+  }
+
+  async function markConfirmed(id: string) {
+    if (!confirm('确认将此订单恢复为「已确认」状态？')) return
+    setSaving(true)
+    try {
+      await fetch(`/api/bookings/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'confirmed' }),
       })
       await loadDay(date)
     } finally { setSaving(false) }
@@ -554,6 +591,15 @@ function ScheduleView() {
                                 onClick={() => setCancelTarget(b)}
                                 className="flex-1 rounded bg-white/70 text-[9px] text-red-500 hover:bg-white font-medium py-0.5 disabled:opacity-50">
                                 ✕
+                              </button>
+                            </div>
+                          )}
+                          {b.status === 'completed' && (
+                            <div className="absolute inset-x-0.5 bottom-0.5 hidden group-hover:flex gap-0.5">
+                              <button disabled={saving}
+                                onClick={() => markConfirmed(b.booking_id)}
+                                className="flex-1 rounded bg-white/70 text-[9px] text-amber-600 hover:bg-white font-medium py-0.5 disabled:opacity-50">
+                                ↩
                               </button>
                             </div>
                           )}
