@@ -5,21 +5,28 @@ import { useParams, useRouter } from 'next/navigation'
 import { formatHMS, formatChineseDuration, calcBillingMinutes, calcBill, TIMER_PRICING } from '@/lib/timer/pricing'
 
 interface TimerSession {
-  session_id:       string
-  booking_id:       string | null
-  customer_name:    string
-  status:           'idle' | 'running' | 'paused' | 'completed'
-  started_at:       string | null
-  paused_at:        string | null
-  total_paused_ms:  number
-  stopped_at:       string | null
-  elapsed_minutes:  number | null
-  billing_minutes:  number | null
-  amount_gbp:       number | null
-  amount_cny:       number | null
-  exchange_rate:    number | null
-  bill_breakdown:   { label: string; amount: number }[] | null
-  created_by:       string | null
+  session_id:         string
+  booking_id:         string | null
+  customer_name:      string
+  status:             'idle' | 'running' | 'paused' | 'completed'
+  started_at:         string | null
+  paused_at:          string | null
+  total_paused_ms:    number
+  stopped_at:         string | null
+  elapsed_minutes:    number | null
+  billing_minutes:    number | null
+  amount_gbp:         number | null
+  amount_cny:         number | null
+  exchange_rate:      number | null
+  bill_breakdown:     { label: string; amount: number }[] | null
+  created_by:         string | null
+  // 结算字段
+  is_settled:         boolean
+  actual_amount_gbp:  number | null
+  actual_amount_cny:  number | null
+  settlement_note:    string | null
+  settled_at:         string | null
+  settled_by:         string | null
 }
 
 function calcElapsed(session: TimerSession): number {
@@ -219,7 +226,7 @@ export default function AdminTimerDetailPage() {
           ))}
           <div className="flex justify-between items-baseline pt-3 mt-1">
             <span className="font-semibold text-stone-700">
-              合计（{session.billing_minutes} min）
+              应收（{session.billing_minutes} min）
             </span>
             <span className="text-2xl font-bold text-terracotta">£{session.amount_gbp?.toFixed(2)}</span>
           </div>
@@ -229,6 +236,11 @@ export default function AdminTimerDetailPage() {
             </p>
           )}
         </div>
+      )}
+
+      {/* Settlement */}
+      {isCompleted && (
+        <SettlementPanel session={session} onSettled={fetchSession} />
       )}
 
       {/* Live bill preview (running) */}
@@ -282,6 +294,153 @@ export default function AdminTimerDetailPage() {
         {session.stopped_at && <p>结束时间：{new Date(session.stopped_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' })}</p>}
         <p>操作员：{session.created_by ?? '—'}</p>
       </div>
+    </div>
+  )
+}
+
+// ── 结算面板 ─────────────────────────────────────────────────────────────────
+function SettlementPanel({ session, onSettled }: { session: TimerSession; onSettled: () => void }) {
+  const [actualGbp,  setActualGbp]  = useState(session.actual_amount_gbp?.toString() ?? session.amount_gbp?.toFixed(2) ?? '')
+  const [note,       setNote]       = useState(session.settlement_note ?? '')
+  const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState('')
+
+  // 已结算 → 只展示结果
+  if (session.is_settled) {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-emerald-600 text-lg">✅</span>
+          <p className="text-sm font-semibold text-emerald-700">已结算</p>
+          <span className="ml-auto text-xs text-stone-400">
+            {session.settled_at ? new Date(session.settled_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' }) : ''}
+          </span>
+        </div>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-stone-500">应收</span>
+            <span className="font-medium text-stone-700">£{session.amount_gbp?.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-stone-500">实收</span>
+            <span className="font-bold text-emerald-700 text-base">£{session.actual_amount_gbp?.toFixed(2)}</span>
+          </div>
+          {session.actual_amount_cny && (
+            <div className="flex justify-between">
+              <span className="text-stone-500">实收（人民币）</span>
+              <span className="font-medium text-stone-700">¥{session.actual_amount_cny.toFixed(2)}</span>
+            </div>
+          )}
+          {session.settlement_note && (
+            <div className="mt-2 bg-white rounded-xl px-3 py-2 text-xs text-stone-500 border border-emerald-100">
+              备注：{session.settlement_note}
+            </div>
+          )}
+          {session.booking_id && (
+            <p className="text-xs text-stone-400 mt-1">关联预约已自动标记为已完成</p>
+          )}
+          <p className="text-xs text-stone-400">结算人：{session.settled_by ?? '—'}</p>
+        </div>
+      </div>
+    )
+  }
+
+  async function handleSettle() {
+    const gbpVal = parseFloat(actualGbp)
+    if (isNaN(gbpVal) || gbpVal < 0) { setError('请输入有效的实收金额'); return }
+    setError('')
+    setSaving(true)
+    try {
+      const res  = await fetch(`/api/admin/timers/${session.session_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action:            'settle',
+          actual_amount_gbp: gbpVal,
+          settlement_note:   note || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? '结算失败'); return }
+      onSettled()
+    } catch {
+      setError('网络错误，请重试')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = 'w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta'
+
+  return (
+    <div className="bg-white border border-stone-100 rounded-2xl px-5 py-4 shadow-sm">
+      <p className="text-xs font-semibold text-stone-400 uppercase mb-4">确认结算</p>
+
+      {/* 订单摘要 */}
+      <div className="bg-stone-50 rounded-xl px-4 py-3 mb-4 space-y-1.5 text-sm">
+        <div className="flex justify-between text-stone-500">
+          <span>客户</span>
+          <span className="font-medium text-stone-700">{session.customer_name}</span>
+        </div>
+        <div className="flex justify-between text-stone-500">
+          <span>订单号</span>
+          <span className="font-mono text-xs text-stone-600">{session.session_id}</span>
+        </div>
+        <div className="flex justify-between text-stone-500">
+          <span>计费时长</span>
+          <span className="font-medium text-stone-700">{session.billing_minutes} 分钟</span>
+        </div>
+        {session.started_at && (
+          <div className="flex justify-between text-stone-500">
+            <span>开始时间</span>
+            <span className="text-stone-600">{new Date(session.started_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' })}</span>
+          </div>
+        )}
+        {session.stopped_at && (
+          <div className="flex justify-between text-stone-500">
+            <span>结束时间</span>
+            <span className="text-stone-600">{new Date(session.stopped_at).toLocaleString('zh-CN', { timeZone: 'Europe/London' })}</span>
+          </div>
+        )}
+        <div className="flex justify-between pt-1.5 border-t border-stone-200">
+          <span className="font-semibold text-stone-600">应收</span>
+          <span className="font-bold text-terracotta text-base">£{session.amount_gbp?.toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* 实收输入 */}
+      <div className="mb-3">
+        <label className="block text-xs text-stone-400 mb-1">实收金额（£）</label>
+        <input
+          type="number" step="0.01" min="0"
+          className={inputCls}
+          value={actualGbp}
+          onChange={e => setActualGbp(e.target.value)}
+          placeholder={session.amount_gbp?.toFixed(2)}
+        />
+      </div>
+
+      <div className="mb-4">
+        <label className="block text-xs text-stone-400 mb-1">备注（可选）</label>
+        <textarea rows={2} className={inputCls + ' resize-none'} placeholder="如：微信支付、现金、已抹零…"
+          value={note} onChange={e => setNote(e.target.value)} />
+      </div>
+
+      {session.booking_id && (
+        <p className="text-xs text-stone-400 mb-3 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+          结算后将自动把关联预约标记为「已完成」
+        </p>
+      )}
+
+      {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+
+      <button
+        onClick={handleSettle}
+        disabled={saving}
+        className="w-full py-3 rounded-2xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 disabled:opacity-50 transition shadow-sm"
+      >
+        {saving ? '结算中…' : '✅ 确认结算'}
+      </button>
     </div>
   )
 }

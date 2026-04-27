@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { calcBillingMinutes, calcBill } from '@/lib/timer/pricing'
 
-type Action = 'start' | 'pause' | 'resume' | 'stop'
+type Action = 'start' | 'pause' | 'resume' | 'stop' | 'settle'
 
 export async function GET(
   _req: NextRequest,
@@ -61,10 +61,10 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: '未授权' }, { status: 401 })
 
   const { id }   = await params
-  const body     = await request.json() as { action: Action }
+  const body     = await request.json() as { action: Action; actual_amount_gbp?: number; actual_amount_cny?: number; settlement_note?: string }
   const { action } = body
 
-  if (!['start', 'pause', 'resume', 'stop'].includes(action)) {
+  if (!['start', 'pause', 'resume', 'stop', 'settle'].includes(action)) {
     return NextResponse.json({ error: '无效操作' }, { status: 400 })
   }
 
@@ -77,10 +77,52 @@ export async function PATCH(
     .single()
 
   if (fetchErr || !session) return NextResponse.json({ error: '计时订单不存在' }, { status: 404 })
-  if (session.status === 'completed') return NextResponse.json({ error: '计时已结束' }, { status: 409 })
+  if (session.status !== 'completed' && action === 'settle') {
+    return NextResponse.json({ error: '请先结束计时再结算' }, { status: 409 })
+  }
+  if (session.status === 'completed' && action !== 'settle') {
+    return NextResponse.json({ error: '计时已结束' }, { status: 409 })
+  }
 
   const now    = new Date()
   let update: Record<string, unknown> = {}
+
+  // ── 结算 ────────────────────────────────────────────────────────────────────
+  if (action === 'settle') {
+    const actualGbp = body.actual_amount_gbp ?? session.amount_gbp
+    update = {
+      is_settled:        true,
+      actual_amount_gbp: actualGbp,
+      actual_amount_cny: body.actual_amount_cny ?? null,
+      settlement_note:   body.settlement_note   ?? null,
+      settled_at:        now.toISOString(),
+      settled_by:        user.email ?? user.id,
+    }
+
+    const { data: updated, error: updateErr } = await admin
+      .from('timer_sessions')
+      .update(update)
+      .eq('session_id', id)
+      .select()
+      .single()
+
+    if (updateErr) {
+      console.error('[settle /api/admin/timers]', updateErr)
+      return NextResponse.json({ error: '结算失败' }, { status: 500 })
+    }
+
+    // 如果关联了预约，自动标记为已完成
+    if (session.booking_id) {
+      const bookingAdmin = createAdminClient()
+      await bookingAdmin
+        .from('bookings')
+        .update({ status: 'completed' })
+        .eq('booking_id', session.booking_id)
+        .in('status', ['confirmed', 'payment_pending'])
+    }
+
+    return NextResponse.json({ session: updated })
+  }
 
   if (action === 'start') {
     if (session.status !== 'idle') return NextResponse.json({ error: '计时已开始' }, { status: 409 })
