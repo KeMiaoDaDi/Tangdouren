@@ -10,8 +10,8 @@ import { buildUpdateEmail } from '@/lib/email/templates/update'
 
 const bodySchema = z.object({
   booking_date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  start_time:          z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  end_time:            z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  start_time:          z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).transform(v => v.slice(0, 5)).optional(),
+  end_time:            z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).transform(v => v.slice(0, 5)).optional(),
   assigned_table_code: z.string().optional(),
   party_size:          z.number().int().min(1).max(4).optional(),
   remark:              z.string().max(500).nullable().optional(),

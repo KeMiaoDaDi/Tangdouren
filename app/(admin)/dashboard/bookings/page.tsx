@@ -132,8 +132,8 @@ function EditDialog({ booking, onClose, onSaved }: EditDialogProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           booking_date:        form.booking_date,
-          start_time:          form.start_time,
-          end_time:            form.end_time,
+          start_time:          form.start_time.slice(0, 5),
+          end_time:            form.end_time.slice(0, 5),
           assigned_table_code: form.assigned_table_code,
           party_size:          form.party_size,
           remark:              form.remark || null,
