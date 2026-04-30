@@ -4,6 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { createBooking, BookingError } from '@/lib/booking/bookingService'
 import { BUSINESS_CONFIG as cfg } from '@/lib/booking/config'
+import { TABLE_TYPE_DISPLAY } from '@/lib/booking/config'
+import { PAYMENT_ENABLED } from '@/lib/payment/depositConfig'
+import { sendEmail } from '@/lib/email/sender'
+import { buildConfirmationEmail } from '@/lib/email/templates/confirmation'
+import { generateCancelToken, buildCancelUrl } from '@/lib/token/cancelToken'
 
 // ── POST /api/bookings — 提交新预约 ───────────────────────────────────────────
 
@@ -33,6 +38,42 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
     const result   = await createBooking(parsed.data, supabase)
+
+    // ── 支付关闭：直接确认预约，发送确认邮件 ──────────────────────────────────
+    if (!PAYMENT_ENABLED) {
+      // 更新状态为 confirmed
+      await supabase
+        .from('bookings')
+        .update({ status: 'confirmed', deposit_amount: 0 })
+        .eq('booking_id', result.bookingId)
+
+      // 生成取消 token
+      const { token, hash, expiresAt } = generateCancelToken()
+      await supabase
+        .from('bookings')
+        .update({ cancel_token_hash: hash, cancel_token_expires_at: expiresAt.toISOString() })
+        .eq('booking_id', result.bookingId)
+
+      // 发送确认邮件
+      const tableDisplay = `${TABLE_TYPE_DISPLAY[result.assignedTableType as keyof typeof TABLE_TYPE_DISPLAY] ?? result.assignedTableType} · ${result.assignedTableCode}`
+      const { subject, html } = buildConfirmationEmail({
+        customerName:  parsed.data.customerName,
+        bookingDate:   parsed.data.date,
+        startTime:     parsed.data.startTime,
+        endTime:       result.endTime,
+        tableDisplay,
+        partySize:     parsed.data.partySize,
+        depositAmount: 0,
+        cancelUrl:     buildCancelUrl(token),
+        studioName:    process.env.NEXT_PUBLIC_STUDIO_NAME  ?? '糖豆人手工工作室',
+        studioAddress: 'Unit 226, 65-75 Whitechapel Road, London E1 1DU',
+        studioEmail:   process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk',
+      })
+      void sendEmail({ to: parsed.data.email, subject, html })
+        .catch(e => console.error('[POST /api/bookings] 邮件发送失败:', e))
+
+      return NextResponse.json({ ...result, confirmed: true, depositAmount: 0 }, { status: 201 })
+    }
 
     return NextResponse.json(result, { status: 201 })
 

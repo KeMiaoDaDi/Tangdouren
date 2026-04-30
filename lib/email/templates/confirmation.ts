@@ -93,9 +93,10 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
         </div>
       </div>
 
-      <div class="deposit-badge">
-        ✅ 已支付定金 <strong>${formatGBP(depositAmount)}</strong>，余款到店结清
-      </div>
+      ${depositAmount > 0
+        ? `<div class="deposit-badge">✅ 已支付定金 <strong>${formatGBP(depositAmount)}</strong>，余款到店结清</div>`
+        : `<div class="deposit-badge">✅ 预约已确认，无需预付定金，到店结清即可</div>`
+      }
 
       <div class="policy-box">
         <strong>取消政策</strong><br />

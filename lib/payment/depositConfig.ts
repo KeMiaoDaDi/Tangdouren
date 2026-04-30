@@ -3,6 +3,12 @@
 // 金额单位：便士（pence）。£1 = 100p
 // ============================================================
 
+/**
+ * 支付开关 — 设为 false 时跳过 Stripe，预约直接确认
+ * 恢复收取定金时改回 true 即可
+ */
+export const PAYMENT_ENABLED = false
+
 export const DEPOSIT_CONFIG = {
   currency: 'gbp',
 

@@ -254,6 +254,13 @@ export default function BookingPage() {
         endTime:           bookingData.endTime,
       })
 
+      // 支付已关闭：直接进入完成步骤
+      if (bookingData.confirmed) {
+        clearPendingBooking()
+        setStep('done')
+        return
+      }
+
       // Step 2: 创建 Stripe Checkout Session
       const sessionRes = await fetch(`/api/bookings/${bookingData.bookingId}/checkout-session`, {
         method: 'POST',
@@ -699,11 +706,9 @@ export default function BookingPage() {
                   <p className="text-charcoal-light">👥 人数：{partySize === 3 ? '3-4' : partySize} 人{acceptsSharing ? '（接受拼桌）' : ''}</p>
                 </div>
 
-                {/* 定金说明 */}
-                <div className="mt-5 rounded-xl bg-terracotta/5 border border-terracotta/20 px-4 py-3 text-sm text-charcoal-light">
-                  💳 提交后将跳转至支付页面，收取定金
-                  <strong className="text-terracotta"> £{partySize === 3 ? '15' : partySize === 2 ? '10' : '5'}</strong>
-                  （到店结清余款）
+                {/* 提示说明 */}
+                <div className="mt-5 rounded-xl bg-sage/10 border border-sage/30 px-4 py-3 text-sm text-charcoal-light">
+                  ✅ 提交后名额立即锁定，无需支付定金，到店结清即可
                 </div>
 
                 {submitError && (
@@ -712,9 +717,9 @@ export default function BookingPage() {
                   </div>
                 )}
 
-                <button type="submit" disabled={submitting || redirecting} className="btn-primary w-full mt-4 py-3.5 text-base">
-                  {redirecting ? '正在跳转支付…' : submitting ? '处理中…' : '下一步：支付定金'}
-                  {!submitting && !redirecting && <CheckCircle2 size={18} />}
+                <button type="submit" disabled={submitting} className="btn-primary w-full mt-4 py-3.5 text-base">
+                  {submitting ? '处理中…' : '确认预约'}
+                  {!submitting && <CheckCircle2 size={18} />}
                 </button>
               </form>
             </div>
