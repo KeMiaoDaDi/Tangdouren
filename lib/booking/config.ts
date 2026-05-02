@@ -35,6 +35,10 @@ export const TABLE_DEFINITIONS = [
 // 恢复时从此数组移除对应桌号即可
 export const DISABLED_TABLE_CODES: string[] = ['S4', 'S5']
 
+// 每周固定休息日（0=周日, 1=周一, 2=周二 … 6=周六）
+// 前台日历和 API 均会拒绝这些星期几的预约
+export const CLOSED_WEEKDAYS: number[] = [1]  // 周一休息
+
 export type TableType = 'single' | 'double' | 'four'
 
 // 人数分类

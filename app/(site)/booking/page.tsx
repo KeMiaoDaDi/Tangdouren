@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AvailabilityResult } from '@/lib/booking/types'
-import { BUSINESS_CONFIG } from '@/lib/booking/config'
+import { BUSINESS_CONFIG, CLOSED_WEEKDAYS } from '@/lib/booking/config'
 
 // ── localStorage 待支付预约 ────────────────────────────────────────────────
 const LS_KEY = 'tangdouren_pending_booking'
@@ -399,10 +399,11 @@ export default function BookingPage() {
                 const tooFar      = isTooFar(day)
                 const blocked     = isBlocked(day)
                 const closedToday = isClosedToday(day)
+                const isClosedWeekday = CLOSED_WEEKDAYS.includes(new Date(key).getDay())
                 const sel         = selectedDate === key
                 const isToday     = key === today
-                const disabled    = past || tooFar || blocked || closedToday
-                const dimmed      = past || tooFar || blocked || closedToday
+                const disabled    = past || tooFar || blocked || closedToday || isClosedWeekday
+                const dimmed      = past || tooFar || blocked || closedToday || isClosedWeekday
 
                 return (
                   <button key={day} disabled={disabled} onClick={() => setDate(key)}

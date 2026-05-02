@@ -4,7 +4,7 @@ import type { CreateBookingRequest, CreateBookingResponse, ExistingBooking } fro
 import { timeToMinutes, minutesToTime, fitsWithinBusinessHours } from './timeRuleService'
 import { getAvailability, mapDbRowToExisting } from './availabilityService'
 import { assignTable } from './tableAssignmentService'
-import { getPartySizeCategory } from './config'
+import { getPartySizeCategory, CLOSED_WEEKDAYS } from './config'
 import { getDepositAmount, DEPOSIT_CONFIG } from '@/lib/payment/depositConfig'
 
 // ── 日期是否被封禁 ────────────────────────────────────────────────────────────
@@ -61,6 +61,12 @@ export async function createBooking(
   const startMin = timeToMinutes(startTime)
   if (!fitsWithinBusinessHours(startMin, durationMinutes, cfg)) {
     throw new BookingError('该时间段超出营业时间范围', 400)
+  }
+
+  // 1b. 每周固定休息日检查（0=周日,1=周一…）
+  const weekday = new Date(date).getDay()
+  if (CLOSED_WEEKDAYS.includes(weekday)) {
+    throw new BookingError('工作室每周一休息，请选择其他日期', 400)
   }
 
   // 2. 日期封禁检查
