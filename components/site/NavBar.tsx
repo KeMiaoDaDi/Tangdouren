@@ -8,10 +8,11 @@ import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navLinks = [
-  { href: '/',          label: '首页' },
-  { href: '/gallery',   label: '作品展示' },
-  { href: '/faq',      label: 'FAQs' },
-  { href: '/booking',   label: '立即预约' },
+  { href: '/',           label: '首页' },
+  { href: '/gallery',    label: '作品展示' },
+  { href: '/location',   label: '地点指引' },
+  { href: '/faq',        label: 'FAQs' },
+  { href: '/booking',    label: '立即预约' },
 ]
 
 export default function NavBar() {
