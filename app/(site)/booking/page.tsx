@@ -737,7 +737,7 @@ export default function BookingPage() {
             <p className="text-charcoal-light mb-2">您的预约已自动确认，名额已为您锁定。</p>
             <p className="text-sm text-charcoal-light/60 mb-8">如需变更或取消，请通过联系方式告知工作室。</p>
 
-            <div className="rounded-2xl bg-warm-50 border border-sand-200 p-4 text-sm text-left space-y-2 mb-8">
+            <div className="rounded-2xl bg-warm-50 border border-sand-200 p-4 text-sm text-left space-y-2 mb-6">
               <p className="font-semibold text-charcoal mb-2">您的预约详情</p>
               <p className="text-xs text-charcoal-light/70">编号：{bookingResult.bookingId.slice(0, 8)}…</p>
               <p className="text-charcoal-light">📅 {selectedDate}</p>
@@ -745,6 +745,15 @@ export default function BookingPage() {
               <p className="text-charcoal-light">🪑 {selectedOption.displayTag} · {bookingResult.assignedTableCode}</p>
               <p className="text-charcoal-light">👤 {form.name} · {partySize === 3 ? '3-4' : partySize} 人</p>
               <p className="text-charcoal-light">✉️ {form.email}</p>
+            </div>
+
+            {/* 地点指引提示 */}
+            <div className="rounded-2xl bg-terracotta/5 border border-terracotta/20 px-4 py-3 text-sm text-charcoal-light mb-8">
+              在出发前请详情查看{' '}
+              <a href="/location" className="inline-flex items-center gap-0.5 rounded-lg bg-terracotta text-white px-2.5 py-0.5 text-xs font-medium hover:bg-terracotta/90 transition-colors">
+                地点指引
+              </a>
+              {' '}找到我们！
             </div>
 
             <button onClick={resetAll} className="btn-secondary">再次预约</button>

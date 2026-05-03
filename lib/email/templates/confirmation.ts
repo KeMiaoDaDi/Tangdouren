@@ -98,6 +98,15 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
         : `<div class="deposit-badge">✅ 预约已确认，无需预付定金，到店结清即可</div>`
       }
 
+      <div style="background:#fff8f0;border:1px solid #f0d8c8;border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:14px;color:#3d2f2a;text-align:center;line-height:1.8;">
+        在出发前请详细查看
+        <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.tangdouren.co.uk'}/location"
+           style="display:inline-block;background:#D97059;color:#ffffff;text-decoration:none;font-weight:600;padding:3px 10px;border-radius:6px;font-size:13px;margin:0 4px;">
+          地点指引
+        </a>
+        找到我们！
+      </div>
+
       <div class="policy-box">
         <strong>取消政策</strong><br />
         距预约开始 12 小时以上取消，定金全额退还。<br />
