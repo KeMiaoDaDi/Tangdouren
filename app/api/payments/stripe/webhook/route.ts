@@ -13,6 +13,7 @@ import { getStripe } from '@/lib/payment/stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateCancelToken, buildCancelUrl } from '@/lib/token/cancelToken'
 import { sendEmail } from '@/lib/email/sender'
+import { notifyAdminNewBooking } from '@/lib/email/notifyAdmin'
 import { buildConfirmationEmail } from '@/lib/email/templates/confirmation'
 
 // Next.js App Router：Webhook 必须读取原始 body，不能用 request.json()
@@ -159,6 +160,21 @@ async function handleCheckoutCompleted(
   })
 
   const emailResult = await sendEmail({ to: booking.email, subject, html })
+
+  // 通知管理员
+  void notifyAdminNewBooking({
+    bookingId,
+    customerName: booking.customer_name,
+    email:        booking.email,
+    bookingDate:  booking.booking_date,
+    startTime:    booking.start_time,
+    endTime:      booking.end_time,
+    tableCode:    booking.assigned_table_code,
+    tableType:    booking.assigned_table_type,
+    partySize:    booking.party_size,
+    remark:       booking.remark,
+    source:       'Stripe支付完成',
+  })
 
   await supabase.from('booking_events').insert({
     booking_id: bookingId,

@@ -9,6 +9,7 @@ import { PAYMENT_ENABLED } from '@/lib/payment/depositConfig'
 import { sendEmail } from '@/lib/email/sender'
 import { buildConfirmationEmail } from '@/lib/email/templates/confirmation'
 import { generateCancelToken, buildCancelUrl } from '@/lib/token/cancelToken'
+import { notifyAdminNewBooking } from '@/lib/email/notifyAdmin'
 
 // ── POST /api/bookings — 提交新预约 ───────────────────────────────────────────
 
@@ -71,6 +72,21 @@ export async function POST(request: NextRequest) {
       })
       void sendEmail({ to: parsed.data.email, subject, html })
         .catch(e => console.error('[POST /api/bookings] 邮件发送失败:', e))
+
+      // 通知管理员
+      void notifyAdminNewBooking({
+        bookingId:    result.bookingId,
+        customerName: parsed.data.customerName,
+        email:        parsed.data.email,
+        bookingDate:  parsed.data.date,
+        startTime:    parsed.data.startTime,
+        endTime:      result.endTime,
+        tableCode:    result.assignedTableCode,
+        tableType:    result.assignedTableType,
+        partySize:    parsed.data.partySize,
+        remark:       parsed.data.remark,
+        source:       '顾客在线预约',
+      })
 
       return NextResponse.json({ ...result, confirmed: true, depositAmount: 0 }, { status: 201 })
     }
