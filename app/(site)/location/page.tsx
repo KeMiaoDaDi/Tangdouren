@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { MapPin, MessageCircle } from 'lucide-react'
 
@@ -8,11 +7,11 @@ export const metadata = {
 }
 
 const steps = [
-  { num: 1, caption: '从 Aldgate East 地铁站出口出来，沿 Whitechapel Road 向西走' },
+  { num: 1, caption: '从 Aldgate East 地铁站出口出来，沿 Whitechapel Road 向东走' },
   { num: 2, caption: '沿街道继续前行，留意路边建筑' },
-  { num: 3, caption: '找到 65–75 Whitechapel Road 大楼入口' },
+  { num: 3, caption: '找到 65 Whitechapel Road 大楼入口，使用呼机拨打 226（周末或节假日可能需要等待店员下来接您）' },
   { num: 4, caption: '进入大楼后按指引前往 Unit 226' },
-  { num: 5, caption: '到达工作室门口，欢迎进来！' },
+  { num: 5, caption: '到达工作室门口，店员将会在这里接待您！' },
 ]
 
 export default function LocationPage() {
@@ -58,17 +57,14 @@ export default function LocationPage() {
 
               {/* 卡片 */}
               <div className="flex-1 bg-white rounded-2xl shadow-card overflow-hidden border border-sand-100">
-                {/* 图片 */}
-                <div className="relative w-full" style={{ aspectRatio: '16/10' }}>
-                  <Image
-                    src={`/location-guide/${step.num}.jpg`}
-                    alt={`步骤 ${step.num}`}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 100vw, 672px"
-                    priority={step.num <= 2}
-                  />
-                </div>
+                {/* 图片：完整展示，不裁切 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/location-guide/${step.num}.jpg`}
+                  alt={`步骤 ${step.num}`}
+                  className="w-full h-auto block"
+                  loading={step.num <= 2 ? 'eager' : 'lazy'}
+                />
                 {/* 说明 */}
                 <div className="px-4 py-3">
                   <p className="text-sm text-charcoal leading-relaxed">{step.caption}</p>
