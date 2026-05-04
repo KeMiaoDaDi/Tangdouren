@@ -95,7 +95,7 @@ async function handleCheckoutCompleted(
   // 读取预约信息
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('booking_id, status, customer_name, email, booking_date, start_time, end_time, assigned_table_code, assigned_table_type, deposit_amount, party_size')
+    .select('booking_id, status, customer_name, email, booking_date, start_time, end_time, assigned_table_code, assigned_table_type, deposit_amount, party_size, remark')
     .eq('booking_id', bookingId)
     .single()
 
