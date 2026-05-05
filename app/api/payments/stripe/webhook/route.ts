@@ -162,7 +162,7 @@ async function handleCheckoutCompleted(
   const emailResult = await sendEmail({ to: booking.email, subject, html })
 
   // 通知管理员
-  void notifyAdminNewBooking({
+  await notifyAdminNewBooking({
     bookingId,
     customerName: booking.customer_name,
     email:        booking.email,

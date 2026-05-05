@@ -70,11 +70,13 @@ export async function POST(request: NextRequest) {
         studioAddress: 'Unit 226, 65-75 Whitechapel Road, London E1 1DU',
         studioEmail:   process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk',
       })
-      void sendEmail({ to: parsed.data.email, subject, html })
-        .catch(e => console.error('[POST /api/bookings] 邮件发送失败:', e))
+      const emailResult = await sendEmail({ to: parsed.data.email, subject, html })
+      if (!emailResult.ok) {
+        console.error('[POST /api/bookings] 确认邮件发送失败:', emailResult.error)
+      }
 
       // 通知管理员
-      void notifyAdminNewBooking({
+      await notifyAdminNewBooking({
         bookingId:    result.bookingId,
         customerName: parsed.data.customerName,
         email:        parsed.data.email,
