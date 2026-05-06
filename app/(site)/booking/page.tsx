@@ -207,6 +207,7 @@ export default function BookingPage() {
           durationMinutes: selectedOption.durationMinutes,
           customerName: form.name, email: form.email,
           remark: form.remark || undefined,
+          lang,
         }),
       })
       const bookingData = await bookingRes.json()

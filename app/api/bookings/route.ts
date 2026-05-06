@@ -25,6 +25,7 @@ const BookingSchema = z.object({
   customerName:    z.string().min(1, '请填写姓名').max(50),
   email:           z.string().email('请输入有效的邮箱地址').max(100),
   remark:          z.string().max(500).optional(),
+  lang:            z.enum(['zh', 'en']).optional().default('zh'),
 })
 
 export async function POST(request: NextRequest) {
@@ -66,9 +67,10 @@ export async function POST(request: NextRequest) {
         partySize:     parsed.data.partySize,
         depositAmount: 0,
         cancelUrl:     buildCancelUrl(token),
-        studioName:    process.env.NEXT_PUBLIC_STUDIO_NAME  ?? '糖豆人手工工作室',
+        studioName:    parsed.data.lang === 'en' ? 'Jelly Bean Studio' : (process.env.NEXT_PUBLIC_STUDIO_NAME ?? '糖豆人手工工作室'),
         studioAddress: 'Unit 226, 65-75 Whitechapel Road, London E1 1DU',
         studioEmail:   process.env.NEXT_PUBLIC_STUDIO_EMAIL ?? 'hello@tangdouren.co.uk',
+        lang:          parsed.data.lang,
       })
       const emailResult = await sendEmail({ to: parsed.data.email, subject, html })
       if (!emailResult.ok) {
