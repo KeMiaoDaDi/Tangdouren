@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
+import { t, pick } from '@/lib/i18n/translations'
 
 export const GALLERY_CATEGORIES = ['全部', '展示图库']
 
@@ -18,13 +20,25 @@ interface GalleryGridProps {
 }
 
 export default function GalleryGrid({ items }: GalleryGridProps) {
+  const { lang } = useLanguage()
+  const p = (entry: { zh: string; en: string }) => pick(entry, lang)
+
+  const allLabel      = p(t.galleryAll)
+  const featuredLabel = p(t.galleryFeatured)
+
+  // Derive display label for a category key
+  const displayLabel = (cat: string) => {
+    if (cat === '全部')    return allLabel
+    if (cat === '展示图库') return featuredLabel
+    return cat
+  }
+
   const [activeCategory, setActive] = useState('全部')
 
   const filtered = activeCategory === '全部'
     ? items
     : items.filter(i => i.category === activeCategory)
 
-  // 动态派生分类：全部 → 展示图库（置顶）→ 其余按出现顺序
   const usedCategories = ['全部', ...Array.from(new Set(
     ['展示图库', ...items.map(i => i.category)]
   )).filter(c => c === '展示图库' || items.some(i => i.category === c))]
@@ -45,7 +59,7 @@ export default function GalleryGrid({ items }: GalleryGridProps) {
                     : 'bg-warm-100 text-charcoal-light hover:bg-sand-200 hover:text-charcoal'
                 }`}
               >
-                {cat}
+                {displayLabel(cat)}
               </button>
             ))}
           </div>
@@ -58,7 +72,7 @@ export default function GalleryGrid({ items }: GalleryGridProps) {
           {filtered.length === 0 ? (
             <div className="text-center py-20 text-charcoal-light">
               <div className="text-5xl mb-4">🫘</div>
-              <p className="text-sm">该分类暂无作品，敬请期待</p>
+              <p className="text-sm">{p(t.galleryEmpty)}</p>
             </div>
           ) : (
             <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
@@ -81,7 +95,7 @@ export default function GalleryGrid({ items }: GalleryGridProps) {
                         <p className="text-white text-sm font-semibold">{item.alt_text}</p>
                       )}
                       <span className="inline-block mt-1 rounded-full bg-white/20 backdrop-blur-sm px-2 py-0.5 text-xs text-white/80">
-                        {item.category}
+                        {displayLabel(item.category)}
                       </span>
                     </div>
                   </div>

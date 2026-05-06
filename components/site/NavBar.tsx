@@ -6,19 +6,22 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const navLinks = [
-  { href: '/',           label: '首页' },
-  { href: '/gallery',    label: '作品展示' },
-  { href: '/location',   label: '地点指引' },
-  { href: '/faq',        label: 'FAQs' },
-  { href: '/booking',    label: '立即预约' },
-]
+import { useLanguage } from '@/lib/i18n/LanguageContext'
+import { t, pick } from '@/lib/i18n/translations'
 
 export default function NavBar() {
   const pathname                  = usePathname()
   const [open, setOpen]           = useState(false)
   const [scrolled, setScrolled]   = useState(false)
+  const { lang, toggle }          = useLanguage()
+
+  const navLinks = [
+    { href: '/',         label: pick(t.navHome,     lang) },
+    { href: '/gallery',  label: pick(t.navGallery,  lang) },
+    { href: '/location', label: pick(t.navLocation, lang) },
+    { href: '/faq',      label: pick(t.navFaq,      lang) },
+    { href: '/booking',  label: pick(t.navBook,     lang) },
+  ]
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -41,7 +44,7 @@ export default function NavBar() {
           <div className="h-14 w-14 rounded-xl overflow-hidden shrink-0 shadow-sm">
             <Image
               src="/logo.png"
-              alt="糖豆人手工工作室"
+              alt={pick(t.studioName, lang)}
               width={112}
               height={112}
               className="h-full w-full object-cover"
@@ -49,7 +52,11 @@ export default function NavBar() {
             />
           </div>
           <span className="font-display text-base font-semibold text-charcoal group-hover:text-terracotta transition-colors leading-tight">
-            糖豆人<br />手工工作室
+            {lang === 'zh' ? (
+              <>糖豆人<br />手工工作室</>
+            ) : (
+              <>Jelly Bean<br />Studio</>
+            )}
           </span>
         </Link>
 
@@ -78,16 +85,36 @@ export default function NavBar() {
               </li>
             )
           )}
+
+          {/* Language toggle */}
+          <li>
+            <button
+              onClick={toggle}
+              className="ml-1 px-3 py-1.5 rounded-lg text-xs font-semibold border border-sand-200 text-charcoal-light hover:text-charcoal hover:border-terracotta/40 hover:bg-warm-100 transition-all duration-200 tracking-wide"
+              aria-label="Switch language"
+            >
+              {lang === 'zh' ? 'EN' : '中'}
+            </button>
+          </li>
         </ul>
 
-        {/* Mobile menu toggle */}
-        <button
-          className="md:hidden p-2 rounded-lg hover:bg-warm-100 transition-colors"
-          onClick={() => setOpen(!open)}
-          aria-label="菜单"
-        >
-          {open ? <X size={20} className="text-charcoal" /> : <Menu size={20} className="text-charcoal" />}
-        </button>
+        {/* Mobile: language toggle + hamburger */}
+        <div className="md:hidden flex items-center gap-2">
+          <button
+            onClick={toggle}
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-sand-200 text-charcoal-light hover:text-charcoal hover:bg-warm-100 transition-all"
+            aria-label="Switch language"
+          >
+            {lang === 'zh' ? 'EN' : '中'}
+          </button>
+          <button
+            className="p-2 rounded-lg hover:bg-warm-100 transition-colors"
+            onClick={() => setOpen(!open)}
+            aria-label="菜单"
+          >
+            {open ? <X size={20} className="text-charcoal" /> : <Menu size={20} className="text-charcoal" />}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile menu */}

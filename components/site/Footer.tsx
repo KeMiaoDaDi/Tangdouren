@@ -1,7 +1,21 @@
+'use client'
+
 import Link from 'next/link'
 import { MapPin, Mail } from 'lucide-react'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
+import { t, pick } from '@/lib/i18n/translations'
 
 export default function Footer() {
+  const { lang } = useLanguage()
+  const p = (entry: { zh: string; en: string }) => pick(entry, lang)
+
+  const navLinks = [
+    { href: '/',         label: p(t.navHome) },
+    { href: '/gallery',  label: p(t.navGallery) },
+    { href: '/faq',      label: 'FAQs' },
+    { href: '/booking',  label: p(t.footerInline) },
+  ]
+
   return (
     <footer className="bg-charcoal text-white/80">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
@@ -11,23 +25,18 @@ export default function Footer() {
             <div className="flex items-center gap-2 mb-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo.png" alt="logo" className="w-8 h-8 rounded-lg object-cover shrink-0" />
-              <span className="font-display text-lg font-semibold text-white">糖豆人手工工作室</span>
+              <span className="font-display text-lg font-semibold text-white">{p(t.studioName)}</span>
             </div>
-            <p className="text-sm leading-relaxed text-white/60">
-              在伦敦，用一颗颗小豆子，<br />拼出你独一无二的糖豆人。
+            <p className="text-sm leading-relaxed text-white/60 whitespace-pre-line">
+              {p(t.studioTagline)}
             </p>
           </div>
 
           {/* Links */}
           <div>
-            <h4 className="text-sm font-semibold text-white mb-3">快捷导航</h4>
+            <h4 className="text-sm font-semibold text-white mb-3">{p(t.footerQuickLinks)}</h4>
             <ul className="space-y-2 text-sm">
-              {[
-                { href: '/', label: '首页' },
-                { href: '/gallery', label: '作品展示' },
-                { href: '/faq', label: 'FAQs' },
-                { href: '/booking', label: '在线预约' },
-              ].map(({ href, label }) => (
+              {navLinks.map(({ href, label }) => (
                 <li key={href}>
                   <Link href={href} className="hover:text-terracotta-light transition-colors">
                     {label}
@@ -39,14 +48,14 @@ export default function Footer() {
 
           {/* Contact */}
           <div>
-            <h4 className="text-sm font-semibold text-white mb-3">联系我们</h4>
+            <h4 className="text-sm font-semibold text-white mb-3">{p(t.footerContact)}</h4>
             <ul className="space-y-2.5 text-sm">
               <li className="flex items-start gap-2">
                 <MapPin size={14} className="mt-0.5 shrink-0 text-terracotta-light" />
                 <span>
                   Unit 226, 65-75 Whitechapel Road<br />
                   London E1 1DU<br />
-                  <span className="text-white/50">英国时区 GMT/BST</span>
+                  <span className="text-white/50">{p(t.footerTimezone)}</span>
                 </span>
               </li>
               <li className="flex items-center gap-2">
@@ -60,9 +69,9 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
-          <p>© 2025 糖豆人手工工作室. All rights reserved.</p>
+          <p>{p(t.footerCopyright)}</p>
           <Link href="/login" className="hover:text-white/60 transition-colors">
-            管理员入口
+            {p(t.footerAdmin)}
           </Link>
         </div>
       </div>
