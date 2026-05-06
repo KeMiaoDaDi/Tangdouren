@@ -349,6 +349,6 @@ export function pick(entry: { zh: string; en: string }, lang: Lang): string {
 }
 
 // Special helpers for array entries
-export function pickArr(entry: { zh: string[]; en: string[] }, lang: Lang): string[] {
+export function pickArr(entry: { zh: readonly string[]; en: readonly string[] }, lang: Lang): readonly string[] {
   return entry[lang]
 }
