@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import type { AvailabilityResult } from '@/lib/booking/types'
 import { BUSINESS_CONFIG, CLOSED_WEEKDAYS } from '@/lib/booking/config'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
-import { t, pick, pickArr } from '@/lib/i18n/translations'
+import { t, pick } from '@/lib/i18n/translations'
 
 // ── localStorage 待支付预约 ────────────────────────────────────────────────
 const LS_KEY = 'tangdouren_pending_booking'
@@ -53,8 +53,7 @@ type Step = 'date' | 'party' | 'slots' | 'form' | 'done'
 
 export default function BookingPage() {
   const { lang } = useLanguage()
-  const p  = (entry: { zh: string; en: string }) => pick(entry, lang)
-  const pa = (entry: { zh: string[]; en: string[] }) => pickArr(entry, lang)
+  const p = (entry: { zh: string; en: string }) => pick(entry, lang)
 
   const today                = useMemo(() => todayLondon(), [])
   const { year: iy, month: im } = useMemo(() => getLondonYM(), [])
@@ -250,8 +249,8 @@ export default function BookingPage() {
     setErrors({}); setSubmitError(''); setBookingResult(null)
   }
 
-  const WEEKDAYS = pa(t.weekdays)
-  const MONTHS   = pa(t.months)
+  const WEEKDAYS = t.weekdays[lang]
+  const MONTHS   = t.months[lang]
 
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-br from-cream via-warm-50 to-white">
