@@ -322,7 +322,7 @@ export default function BookingPage() {
         {step === 'date' && (
           <div className="card p-6 sm:p-8 animate-fade-in">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="font-display text-xl font-semibold text-charcoal">{p(t.step1Title)}</h2>
+              <h2 className="font-display text-xl font-semibold text-charcoal">{p(t.bkStep1Title)}</h2>
               <span className="text-xs text-charcoal-light bg-warm-100 px-2 py-1 rounded-full">{p(t.step1TodayBadge)}</span>
             </div>
             <p className="text-xs text-charcoal-light mb-6">
@@ -406,7 +406,7 @@ export default function BookingPage() {
               <ChevronLeft size={14} /> {p(t.step2BackBtn)}
             </button>
             <div className="card p-6 sm:p-8">
-              <h2 className="font-display text-xl font-semibold text-charcoal mb-1">{p(t.step2Title)}</h2>
+              <h2 className="font-display text-xl font-semibold text-charcoal mb-1">{p(t.bkStep2Title)}</h2>
               <p className="text-sm text-charcoal-light mb-6">{selectedDate}</p>
 
               <div className="grid grid-cols-3 gap-3 mb-6">
@@ -478,7 +478,7 @@ export default function BookingPage() {
             </button>
             <div className="card p-6 sm:p-8">
               <div className="flex items-start justify-between mb-1">
-                <h2 className="font-display text-xl font-semibold text-charcoal">{p(t.step3Title)}</h2>
+                <h2 className="font-display text-xl font-semibold text-charcoal">{p(t.bkStep3Title)}</h2>
                 <button onClick={fetchAvailability} className="text-xs text-charcoal-light hover:text-terracotta">{p(t.step3Refresh)}</button>
               </div>
               <p className="text-sm text-charcoal-light mb-6">

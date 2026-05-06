@@ -247,7 +247,7 @@ export const t = {
   stepForm:   { zh: '填信息',  en: 'Details' },
 
   // Step 1 – Date
-  step1Title:          { zh: '选择预约日期',    en: 'Choose a Date' },
+  bkStep1Title:        { zh: '选择预约日期',    en: 'Choose a Date' },
   step1TodayBadge:     { zh: '🇬🇧 伦敦时间',   en: '🇬🇧 London Time' },
   step1Today:          { zh: '今日：',           en: 'Today: ' },
   step1Loading:        { zh: '加载中…',          en: 'Loading…' },
@@ -268,7 +268,7 @@ export const t = {
 
   // Step 2 – Party
   step2BackBtn:        { zh: '返回修改日期',    en: '← Change Date' },
-  step2Title:          { zh: '选择人数',         en: 'Group Size' },
+  bkStep2Title:        { zh: '选择人数',         en: 'Group Size' },
   step2ShareTitle:     { zh: '接受拼桌',         en: 'Join a shared table' },
   step2Share1Desc:     { zh: '允许升级到双人桌，可与另一位单人客户共享', en: 'May share a double table with another solo guest' },
   step2Share2Desc:     { zh: '允许升级到四人桌，可与另一组双人客户共享', en: 'May share a four-person table with another pair' },
@@ -284,7 +284,7 @@ export const t = {
 
   // Step 3 – Slots
   step3BackBtn:        { zh: '返回修改人数',    en: '← Change Group Size' },
-  step3Title:          { zh: '选择时段',         en: 'Choose a Time Slot' },
+  bkStep3Title:        { zh: '选择时段',         en: 'Choose a Time Slot' },
   step3Refresh:        { zh: '刷新',             en: 'Refresh' },
   step3Persons:        { zh: '人',               en: '' },
   step3Sharing:        { zh: ' · 接受拼桌',      en: ' · Shared table' },
