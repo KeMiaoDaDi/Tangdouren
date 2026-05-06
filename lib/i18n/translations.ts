@@ -232,9 +232,123 @@ export const t = {
     zh: '到达工作室门口，店员将会在这里接待您！',
     en: 'You\'ve reached the studio door — our team will be here to welcome you!',
   },
+  // ── Booking Page ───────────────────────────────────────────
+  bookingPageLabel:    { zh: '在线预约', en: 'Book Online' },
+  bookingPageTitle:    { zh: '预约你的拼豆时光', en: 'Book Your Bead Art Session' },
+  bookingHours:        { zh: '营业时间', en: 'Opening hours' },
+  bookingHoursUnit:    { zh: '（英国时间）', en: ' (UK time)' },
+
+  bookingPendingTitle: { zh: '你有一笔待支付的预约', en: 'You have a pending payment' },
+  bookingPendingPay:   { zh: '继续支付', en: 'Continue Payment' },
+
+  stepDate:   { zh: '选日期',  en: 'Date' },
+  stepParty:  { zh: '选人数',  en: 'Group' },
+  stepSlots:  { zh: '选时段',  en: 'Slots' },
+  stepForm:   { zh: '填信息',  en: 'Details' },
+
+  // Step 1 – Date
+  step1Title:          { zh: '选择预约日期',    en: 'Choose a Date' },
+  step1TodayBadge:     { zh: '🇬🇧 伦敦时间',   en: '🇬🇧 London Time' },
+  step1Today:          { zh: '今日：',           en: 'Today: ' },
+  step1Loading:        { zh: '加载中…',          en: 'Loading…' },
+  step1TodayMarker:    { zh: '今',               en: 'T' },
+  step1LegendAvail:    { zh: '可预约',           en: 'Available' },
+  step1LegendSel:      { zh: '已选',             en: 'Selected' },
+  step1LegendDim:      { zh: '不可选',           en: 'Unavailable' },
+  step1Next:           { zh: '下一步：选择人数', en: 'Next: Group Size' },
+
+  weekdays: {
+    zh: ['日','一','二','三','四','五','六'],
+    en: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+  },
+  months: {
+    zh: ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'],
+    en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+  },
+
+  // Step 2 – Party
+  step2BackBtn:        { zh: '返回修改日期',    en: '← Change Date' },
+  step2Title:          { zh: '选择人数',         en: 'Group Size' },
+  step2ShareTitle:     { zh: '接受拼桌',         en: 'Join a shared table' },
+  step2Share1Desc:     { zh: '允许升级到双人桌，可与另一位单人客户共享', en: 'May share a double table with another solo guest' },
+  step2Share2Desc:     { zh: '允许升级到四人桌，可与另一组双人客户共享', en: 'May share a four-person table with another pair' },
+  step2GalleryBtn:     { zh: '查看作品大小与预计时长参考', en: 'Browse works for size & time reference' },
+  step2Next:           { zh: '下一步：查看可约时段', en: 'Next: View Available Slots' },
+
+  party1Label: { zh: '1 人',   en: '1 person' },
+  party1Sub:   { zh: '单人体验', en: 'Solo' },
+  party2Label: { zh: '2 人',   en: '2 people' },
+  party2Sub:   { zh: '双人同乐', en: 'Duo' },
+  party3Label: { zh: '3-4 人', en: '3-4 people' },
+  party3Sub:   { zh: '小组活动', en: 'Group' },
+
+  // Step 3 – Slots
+  step3BackBtn:        { zh: '返回修改人数',    en: '← Change Group Size' },
+  step3Title:          { zh: '选择时段',         en: 'Choose a Time Slot' },
+  step3Refresh:        { zh: '刷新',             en: 'Refresh' },
+  step3Persons:        { zh: '人',               en: '' },
+  step3Sharing:        { zh: ' · 接受拼桌',      en: ' · Shared table' },
+  step3Loading:        { zh: '加载可用时段中…',  en: 'Loading available slots…' },
+  step3Empty:          { zh: '该日期暂无可约时段', en: 'No slots available on this date' },
+  step3EmptySub:       { zh: '请尝试换个日期，或开启拼桌选项', en: 'Try a different date or enable shared tables' },
+  step3Phase1:         { zh: '① 选择开始时间',  en: '① Choose start time' },
+  step3Phase2Prefix:   { zh: '② ',              en: '② Starting at ' },
+  step3Phase2Suffix:   { zh: ' 开始，选择时长', en: ', choose duration' },
+  step3SharedDot:      { zh: '绿点表示该时段有拼桌选项', en: 'Green dot indicates a shared table option is available' },
+  step3Selected:       { zh: '已选：',           en: 'Selected: ' },
+  step3Start:          { zh: ' 开始，',          en: ' start, ' },
+  step3Next:           { zh: '下一步：填写信息', en: 'Next: Your Details' },
+
+  durationHour:   { zh: '小时',  en: ' hr' },
+  durationHours:  { zh: '小时',  en: ' hrs' },
+  partyPersons34: { zh: '3-4',   en: '3-4' },
+  acceptsSharing: { zh: '（接受拼桌）', en: ' (shared)' },
+
+  // Step 4 – Form
+  step4BackBtn:      { zh: '返回修改时段',   en: '← Change Slot' },
+  step4Title:        { zh: '填写预约信息',   en: 'Your Details' },
+  step4NameLabel:    { zh: '姓名 *',         en: 'Name *' },
+  step4NamePH:       { zh: '请填写您预定的姓名', en: 'Enter the name for the booking' },
+  step4NameErr:      { zh: '请输入姓名',     en: 'Please enter your name' },
+  step4EmailLabel:   { zh: '邮箱 *',         en: 'Email *' },
+  step4EmailPH:      { zh: '请输入邮箱地址，如 example@mail.com', en: 'e.g. example@mail.com' },
+  step4EmailErr:     { zh: '请输入邮箱地址', en: 'Please enter your email' },
+  step4EmailFmtErr:  { zh: '请输入有效的邮箱格式，如 example@mail.com', en: 'Please enter a valid email address' },
+  step4RemarkLabel:  { zh: '备注（可选）',   en: 'Notes (optional)' },
+  step4RemarkPH:     { zh: '如：有小朋友一起来、希望座位靠窗…', en: 'e.g. bringing a child, prefer a window seat…' },
+  step4SummaryTitle: { zh: '预约摘要',       en: 'Booking Summary' },
+  step4SummaryDate:  { zh: '📅 日期：',      en: '📅 Date: ' },
+  step4SummaryTime:  { zh: '⏰ 开始：',      en: '⏰ Start: ' },
+  step4SummaryDur:   { zh: '，时长 ',        en: ', duration ' },
+  step4SummaryTable: { zh: '🪑 桌型：',      en: '🪑 Table: ' },
+  step4SummaryGroup: { zh: '👥 人数：',      en: '👥 Group: ' },
+  step4SummaryUnit:  { zh: ' 人',            en: '' },
+  step4DepositOff:   { zh: '✅ 提交后名额立即锁定，无需支付定金，到店结清即可', en: '✅ Your spot is confirmed instantly — no deposit required, just pay on arrival' },
+  step4Submitting:   { zh: '处理中…',        en: 'Processing…' },
+  step4Submit:       { zh: '确认预约',        en: 'Confirm Booking' },
+  step4NetworkErr:   { zh: '网络错误，请检查连接后重试', en: 'Network error, please check your connection and try again' },
+
+  // Step 5 – Done
+  step5Title:       { zh: '预约成功！',      en: 'Booking Confirmed!' },
+  step5Subtitle:    { zh: '您的预约已自动确认，名额已为您锁定。', en: 'Your booking is confirmed — your spot is reserved.' },
+  step5SubNote:     { zh: '如需变更或取消，请通过联系方式告知工作室。', en: 'To change or cancel, please contact the studio.' },
+  step5DetailsTitle:{ zh: '您的预约详情',    en: 'Your Booking Details' },
+  step5Ref:         { zh: '编号：',          en: 'Ref: ' },
+  step5LocationPre: { zh: '在出发前请详情查看', en: 'Before you head out, check the ' },
+  step5LocationBtn: { zh: '地点指引',        en: 'Location Guide' },
+  step5LocationPost:{ zh: '找到我们！',      en: ' to find us!' },
+  step5Again:       { zh: '再次预约',        en: 'Book Again' },
+
+  // Slot load error
+  slotsLoadErr: { zh: '加载失败，请重试', en: 'Failed to load, please try again' },
 } as const
 
 // Helper – pick the right language string
 export function pick(entry: { zh: string; en: string }, lang: Lang): string {
+  return entry[lang]
+}
+
+// Special helpers for array entries
+export function pickArr(entry: { zh: string[]; en: string[] }, lang: Lang): string[] {
   return entry[lang]
 }
