@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient()
 
-    // 检查日期是否被封禁
+    // 检查日期是否被整天封禁
     const { data: blocked } = await supabase
       .from('blocked_dates')
       .select('date')
@@ -69,6 +69,21 @@ export async function GET(request: NextRequest) {
       }
       return NextResponse.json(resp)
     }
+
+    // 加载该日封禁时段（部分时间封禁）
+    const { data: blockedSlots } = await supabase
+      .from('blocked_time_slots')
+      .select('start_time, end_time')
+      .eq('date', date)
+
+    const timeToMins = (t: string) => {
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + m
+    }
+    const blockedRanges = (blockedSlots ?? []).map(s => ({
+      start: timeToMins(s.start_time),
+      end:   timeToMins(s.end_time),
+    }))
 
     // 加载当日所有非取消预约
     const { data: rows, error } = await supabase
@@ -94,9 +109,24 @@ export async function GET(request: NextRequest) {
       durationFilter,
     })
 
+    // ── 过滤被时段封禁覆盖的选项 ────────────────────────────────────────────
+    if (blockedRanges.length > 0) {
+      results = results
+        .map(r => {
+          const startMins = timeToMins(r.startTime)
+          const filteredOptions = r.options.filter(opt => {
+            const endMins = startMins + opt.durationMinutes
+            // 该选项时间范围与任意封禁区间有重叠则排除
+            return !blockedRanges.some(b => startMins < b.end && endMins > b.start)
+          })
+          return { ...r, options: filteredOptions }
+        })
+        .filter(r => r.options.length > 0)
+    }
+
     // ── 今日：过滤已过去的时段（含 30 分钟缓冲，避免临时预约） ──────────────
     if (date === londonToday()) {
-      const cutoff = londonNowMinutes() + 30  // 30 分钟后才可预约
+      const cutoff = londonNowMinutes() + 30
       results = results.filter(r => {
         const [h, m] = r.startTime.split(':').map(Number)
         return h * 60 + m > cutoff
