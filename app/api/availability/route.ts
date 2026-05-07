@@ -124,12 +124,16 @@ export async function GET(request: NextRequest) {
         .filter(r => r.options.length > 0)
     }
 
-    // ── 今日：过滤已过去的时段（含 30 分钟缓冲，避免临时预约） ──────────────
+    // ── 今日：过滤已过去的时段 + 当天特殊限制 ──────────────────────────────
     if (date === londonToday()) {
-      const cutoff = londonNowMinutes() + 30
+      const cutoff = londonNowMinutes() + 60  // 至少 1 小时后才可预约
       results = results.filter(r => {
         const [h, m] = r.startTime.split(':').map(Number)
-        return h * 60 + m > cutoff
+        const startMins = h * 60 + m
+        // 当天 11:00–12:00 时段不允许当日预约（开始时间 < 12:00 均排除）
+        if (startMins < 12 * 60) return false
+        // 必须在当前时间 1 小时后
+        return startMins > cutoff
       })
     }
 
