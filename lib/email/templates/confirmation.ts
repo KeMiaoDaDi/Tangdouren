@@ -35,8 +35,8 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
   const isEn = lang === 'en'
 
   const subject = isEn
-    ? `🎉 Booking Confirmed! ${bookingDate} ${startTime} — ${studioName}`
-    : `🎉 预约成功！${bookingDate} ${startTime} — ${studioName}`
+    ? `🎉 Booking Confirmed! ${bookingDate} ${startTime} — ${studioName} | 📍 Map Included`
+    : `🎉 预约成功！${bookingDate} ${startTime} — ${studioName} | 📍 附地图指引`
 
   const greeting = isEn
     ? `Hi ${customerName}!<br />Your bead art session is confirmed — we can't wait to see you ✨`
@@ -112,6 +112,19 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
       <p>${studioName}</p>
     </div>
     <div class="body">
+      <!-- 醒目地点指引横幅 -->
+      <div style="background:#fff3cd;border:2px solid #f5a623;border-radius:12px;padding:18px 20px;margin-bottom:20px;text-align:center;">
+        <p style="margin:0 0 12px;font-size:15px;color:#7a4f00;line-height:1.6;">${locationWarning}</p>
+        <a href="${locationUrl}"
+           style="display:block;background:#D97059;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 0;border-radius:8px;margin-bottom:10px;letter-spacing:0.3px;">
+          ${locationBtnText}
+        </a>
+        <a href="${studioMapUrl}"
+           style="display:block;background:#ffffff;color:#D97059;text-decoration:none;font-weight:600;font-size:14px;padding:10px 0;border-radius:8px;border:2px solid #D97059;">
+          ${mapBtnText}
+        </a>
+      </div>
+
       <p class="greeting">${greeting}</p>
 
       <div class="detail-box">
@@ -138,19 +151,6 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
       </div>
 
       <div class="deposit-badge">${depositBadge}</div>
-
-      <!-- 醒目地点指引横幅 -->
-      <div style="background:#fff3cd;border:2px solid #f5a623;border-radius:12px;padding:18px 20px;margin-bottom:16px;text-align:center;">
-        <p style="margin:0 0 12px;font-size:15px;color:#7a4f00;line-height:1.6;">${locationWarning}</p>
-        <a href="${locationUrl}"
-           style="display:block;background:#D97059;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 0;border-radius:8px;margin-bottom:10px;letter-spacing:0.3px;">
-          ${locationBtnText}
-        </a>
-        <a href="${studioMapUrl}"
-           style="display:block;background:#ffffff;color:#D97059;text-decoration:none;font-weight:600;font-size:14px;padding:10px 0;border-radius:8px;border:2px solid #D97059;">
-          ${mapBtnText}
-        </a>
-      </div>
 
       <div class="policy-box">
         <strong>${policyTitle}</strong><br />
