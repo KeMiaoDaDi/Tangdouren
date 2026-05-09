@@ -59,8 +59,8 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
         : `✅ 预约已确认，无需预付定金，到店结清即可`)
 
   const locationWarning = isEn
-    ? `⚠️ Our studio is inside a market building and can be a little tricky to find on your first visit. Please read the Location Guide <strong>before you leave home</strong>!`
-    : `⚠️ 本工作室位于市场内部，初次到访可能不易找到，请在<strong>出发前</strong>仔细阅读地点指引！`
+    ? `⚠️ Our studio is inside an office building and can be a little tricky to find on your first visit. Please read the Location Guide <strong>before you leave home</strong>!`
+    : `⚠️ 本工作室位于写字楼内部，初次到访可能不易找到，请在<strong>出发前</strong>仔细阅读地点指引！`
 
   const locationBtnText = isEn ? '📍 View Location Guide' : '📍 查看详细地点指引'
   const mapBtnText      = isEn ? '🗺️ Open in Google Maps' : '🗺️ 在 Google Maps 中打开'
