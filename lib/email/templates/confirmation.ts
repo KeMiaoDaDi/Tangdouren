@@ -48,7 +48,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
   const labelParty   = isEn ? '👥 Group Size'    : '👥 人数'
   const labelAddress = isEn ? '📍 Address'       : '📍 地址'
   const partySizeStr = isEn ? `${partySize} ${partySize === 1 ? 'person' : 'people'}` : `${partySize} 人`
-  const mapLinkText  = isEn ? '📍 View on Google Maps →' : '📍 在 Google Maps 查看 →'
+  // mapLinkText removed – now using standalone buttons below
 
   const depositBadge = depositAmount > 0
     ? (isEn
@@ -58,9 +58,12 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
         ? `✅ Booking confirmed — no deposit required. Pay in full on arrival.`
         : `✅ 预约已确认，无需预付定金，到店结清即可`)
 
-  const locationBlock = isEn
-    ? `Before heading over, check out our <a href="${locationUrl}" style="display:inline-block;background:#D97059;color:#ffffff;text-decoration:none;font-weight:600;padding:3px 10px;border-radius:6px;font-size:13px;margin:0 4px;">Location Guide</a> to find us easily!`
-    : `在出发前请详细查看 <a href="${locationUrl}" style="display:inline-block;background:#D97059;color:#ffffff;text-decoration:none;font-weight:600;padding:3px 10px;border-radius:6px;font-size:13px;margin:0 4px;">地点指引</a> 找到我们！`
+  const locationWarning = isEn
+    ? `⚠️ Our studio is inside a market building and can be a little tricky to find on your first visit. Please read the Location Guide <strong>before you leave home</strong>!`
+    : `⚠️ 本工作室位于市场内部，初次到访可能不易找到，请在<strong>出发前</strong>仔细阅读地点指引！`
+
+  const locationBtnText = isEn ? '📍 View Location Guide' : '📍 查看详细地点指引'
+  const mapBtnText      = isEn ? '🗺️ Open in Google Maps' : '🗺️ 在 Google Maps 中打开'
 
   const policyTitle  = isEn ? 'Cancellation Policy'  : '取消政策'
   const policyBody   = isEn
@@ -130,17 +133,23 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
         </div>
         <div class="detail-row">
           <span class="detail-label">${labelAddress}</span>
-          <span class="detail-value">
-            ${studioAddress}<br />
-            <a href="${studioMapUrl}" style="font-size:12px;color:#D97059;font-weight:400;text-decoration:none;">${mapLinkText}</a>
-          </span>
+          <span class="detail-value">${studioAddress}</span>
         </div>
       </div>
 
       <div class="deposit-badge">${depositBadge}</div>
 
-      <div style="background:#fff8f0;border:1px solid #f0d8c8;border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:14px;color:#3d2f2a;text-align:center;line-height:1.8;">
-        ${locationBlock}
+      <!-- 醒目地点指引横幅 -->
+      <div style="background:#fff3cd;border:2px solid #f5a623;border-radius:12px;padding:18px 20px;margin-bottom:16px;text-align:center;">
+        <p style="margin:0 0 12px;font-size:15px;color:#7a4f00;line-height:1.6;">${locationWarning}</p>
+        <a href="${locationUrl}"
+           style="display:block;background:#D97059;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 0;border-radius:8px;margin-bottom:10px;letter-spacing:0.3px;">
+          ${locationBtnText}
+        </a>
+        <a href="${studioMapUrl}"
+           style="display:block;background:#ffffff;color:#D97059;text-decoration:none;font-weight:600;font-size:14px;padding:10px 0;border-radius:8px;border:2px solid #D97059;">
+          ${mapBtnText}
+        </a>
       </div>
 
       <div class="policy-box">
