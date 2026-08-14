@@ -12,6 +12,7 @@ export default function Footer() {
   const navLinks = [
     { href: '/',         label: p(t.navHome) },
     { href: '/gallery',  label: p(t.navGallery) },
+    { href: '/pricing',  label: p(t.navPricing) },
     { href: '/faq',      label: 'FAQs' },
     { href: '/booking',  label: p(t.footerInline) },
   ]

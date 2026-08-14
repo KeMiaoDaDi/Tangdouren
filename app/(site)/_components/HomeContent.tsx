@@ -85,6 +85,9 @@ export default function HomeContent({ featuredWorks }: HomeContentProps) {
               {p(t.heroCta)}
               <ArrowRight size={18} />
             </Link>
+            <Link href="/pricing" className="btn-secondary text-base px-8 py-3.5">
+              {p(t.heroViewPricing)}
+            </Link>
             <Link href="/gallery" className="btn-secondary text-base px-8 py-3.5">
               {p(t.heroViewGallery)}
             </Link>

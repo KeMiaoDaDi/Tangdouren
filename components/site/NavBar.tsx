@@ -19,6 +19,7 @@ export default function NavBar() {
     { href: '/',         label: pick(t.navHome,     lang) },
     { href: '/gallery',  label: pick(t.navGallery,  lang) },
     { href: '/location', label: pick(t.navLocation, lang) },
+    { href: '/pricing',  label: pick(t.navPricing,  lang) },
     { href: '/faq',      label: pick(t.navFaq,      lang) },
     { href: '/booking',  label: pick(t.navBook,     lang) },
   ]

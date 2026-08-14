@@ -39,6 +39,7 @@ export const t = {
   navHome:     { zh: '首页',    en: 'Home' },
   navGallery:  { zh: '作品展示', en: 'Gallery' },
   navLocation: { zh: '地点指引', en: 'Location' },
+  navPricing:  { zh: '价格',    en: 'Pricing' },
   navFaq:      { zh: 'FAQs',    en: 'FAQs' },
   navBook:     { zh: '立即预约', en: 'Book Now' },
 
@@ -78,6 +79,7 @@ export const t = {
     en: 'Relax. Create.\nTake something home\nyou\'re truly proud of.',
   },
   heroCta:         { zh: '立即预约体验', en: 'Book Now' },
+  heroViewPricing: { zh: '查看价格',    en: 'View Pricing' },
   heroViewGallery: { zh: '查看作品展示', en: 'View Gallery' },
   heroScroll:      { zh: '向下滚动',    en: 'Scroll' },
 
@@ -232,6 +234,16 @@ export const t = {
     zh: '到达工作室门口，店员将会在这里接待您！',
     en: 'You\'ve reached the studio door — our team will be here to welcome you!',
   },
+  // ── Pricing Page ───────────────────────────────────────────
+  pricingBadge:  { zh: '价格表', en: 'Pricing' },
+  pricingTitle:  { zh: '价格表', en: 'Pricing' },
+  pricingSubtitle: {
+    zh: '计时收费，材料工具全包，到店结清即可。',
+    en: 'Charged by time, all materials included — just pay at the studio.',
+  },
+  pricingImageAlt: { zh: '价格表', en: 'Price list' },
+  pricingCta:   { zh: '立即预约体验', en: 'Book Now' },
+
   // ── Booking Page ───────────────────────────────────────────
   bookingPageLabel:    { zh: '在线预约', en: 'Book Online' },
   bookingPageTitle:    { zh: '预约你的拼豆时光', en: 'Book Your Bead Art Session' },
