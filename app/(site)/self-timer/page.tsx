@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ZoomIn } from 'lucide-react'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
 import { getSeatOptionsForTable, SELF_SERVICE_TABLE_CODES } from '@/lib/timer/selfServiceCore'
+import ImageLightbox from '@/components/site/ImageLightbox'
 
 type Phase = 'home' | 'tutorial' | 'form' | 'confirm'
 
@@ -35,6 +37,7 @@ const copy = {
     starting: '正在开始…',
     contactStaff: '如需暂停或结束计时，请联系店员。',
     guestOnly: '本期为本次体验计时；暂不收集邮箱或累计会员时长。',
+    tapToZoom: '点击放大',
   },
   en: {
     badge: 'In-store self timer',
@@ -59,6 +62,7 @@ const copy = {
     starting: 'Starting…',
     contactStaff: 'Please contact staff if you need to pause or finish.',
     guestOnly: 'This version is for one-off session timing only. Email collection and member history are not enabled yet.',
+    tapToZoom: 'Tap to zoom',
   },
 } as const
 
@@ -80,6 +84,7 @@ export default function SelfTimerPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [tutorialStep, setTutorialStep] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const idempotencyKey = useMemo(makeIdempotencyKey, [])
 
   useEffect(() => {
@@ -141,12 +146,22 @@ export default function SelfTimerPage() {
             <h2 className="font-display text-xl font-semibold text-charcoal">{c.tutorialTitle}</h2>
             <p className="text-sm leading-6 text-charcoal-light">{c.tutorialBody}</p>
             <figure className="overflow-hidden rounded-3xl border border-sand-100 bg-white shadow-sm">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={tutorialImages[tutorialStep]}
-                alt={lang === 'zh' ? `拼豆图片教程第 ${tutorialStep + 1} 步` : `Bead art tutorial step ${tutorialStep + 1}`}
-                className="w-full object-cover"
-              />
+              <button
+                type="button"
+                onClick={() => setLightboxOpen(true)}
+                aria-label={c.tapToZoom}
+                className="relative block w-full cursor-zoom-in"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={tutorialImages[tutorialStep]}
+                  alt={lang === 'zh' ? `拼豆图片教程第 ${tutorialStep + 1} 步` : `Bead art tutorial step ${tutorialStep + 1}`}
+                  className="w-full object-cover"
+                />
+                <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white">
+                  <ZoomIn size={14} /> {c.tapToZoom}
+                </span>
+              </button>
               <figcaption className="px-4 py-2 text-center text-xs text-stone-400">
                 {lang === 'zh' ? `第 ${tutorialStep + 1} 步 / 共 ${tutorialImages.length} 步` : `Step ${tutorialStep + 1} / ${tutorialImages.length}`}
               </figcaption>
@@ -233,6 +248,14 @@ export default function SelfTimerPage() {
           </div>
         )}
       </div>
+
+      {lightboxOpen && (
+        <ImageLightbox
+          images={tutorialImages}
+          initialIndex={tutorialStep}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   )
 }
