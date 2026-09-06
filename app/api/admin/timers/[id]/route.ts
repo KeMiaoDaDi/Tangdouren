@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { calcBillingMinutes, calcBill } from '@/lib/timer/pricing'
+import { resolveActiveSeatCodeFromValue } from '@/lib/timer/selfService'
 
-type Action = 'start' | 'pause' | 'resume' | 'stop' | 'settle'
+type Action = 'start' | 'pause' | 'resume' | 'stop' | 'settle' | 'update_table'
 
 export async function GET(
   _req: NextRequest,
@@ -61,10 +62,10 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: '未授权' }, { status: 401 })
 
   const { id }   = await params
-  const body     = await request.json() as { action: Action; actual_amount_gbp?: number; actual_amount_cny?: number; settlement_note?: string }
+  const body     = await request.json() as { action: Action; actual_amount_gbp?: number; actual_amount_cny?: number; settlement_note?: string; table_number?: string }
   const { action } = body
 
-  if (!['start', 'pause', 'resume', 'stop', 'settle'].includes(action)) {
+  if (!['start', 'pause', 'resume', 'stop', 'settle', 'update_table'].includes(action)) {
     return NextResponse.json({ error: '无效操作' }, { status: 400 })
   }
 
@@ -79,6 +80,23 @@ export async function PATCH(
   if (fetchErr || !session) return NextResponse.json({ error: '计时订单不存在' }, { status: 404 })
   if (session.status !== 'completed' && action === 'settle') {
     return NextResponse.json({ error: '请先结束计时再结算' }, { status: 409 })
+  }
+  if (action === 'update_table') {
+    const tableNumber = body.table_number ? await resolveActiveSeatCodeFromValue(admin, body.table_number) : null
+    if (!tableNumber) return NextResponse.json({ error: '请输入有效座位号' }, { status: 400 })
+
+    const { data: updated, error: updateErr } = await admin
+      .from('timer_sessions')
+      .update({ table_number: tableNumber })
+      .eq('session_id', id)
+      .select()
+      .single()
+
+    if (updateErr) {
+      console.error('[update_table /api/admin/timers]', updateErr)
+      return NextResponse.json({ error: '桌号更新失败' }, { status: 500 })
+    }
+    return NextResponse.json({ session: updated })
   }
   if (session.status === 'completed' && action !== 'settle') {
     return NextResponse.json({ error: '计时已结束' }, { status: 409 })

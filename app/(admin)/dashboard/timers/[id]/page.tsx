@@ -20,6 +20,8 @@ interface TimerSession {
   exchange_rate:      number | null
   bill_breakdown:     { label: string; amount: number }[] | null
   created_by:         string | null
+  table_number:       string | null
+  created_via:        'admin' | 'booking' | 'self_service' | null
   // 结算字段
   is_settled:         boolean
   actual_amount_gbp:  number | null
@@ -49,6 +51,7 @@ export default function AdminTimerDetailPage() {
   const [loading, setLoading] = useState(true)
   const [acting, setActing]   = useState(false)
   const [error, setError]     = useState('')
+  const [tableEdit, setTableEdit] = useState('')
   const tickRef               = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchSession = useCallback(async () => {
@@ -56,6 +59,7 @@ export default function AdminTimerDetailPage() {
     if (!res.ok) { setError('找不到计时订单'); setLoading(false); return }
     const data = await res.json() as { session: TimerSession }
     setSession(data.session)
+    setTableEdit(data.session.table_number ?? '')
     setElapsed(calcElapsed(data.session))
     setLoading(false)
   }, [id])
@@ -82,6 +86,21 @@ export default function AdminTimerDetailPage() {
     if (!res.ok) { alert(data.error ?? '操作失败'); setActing(false); return }
     setSession(data.session!)
     setElapsed(calcElapsed(data.session!))
+    setActing(false)
+  }
+
+  async function updateTable() {
+    if (!tableEdit.trim()) { alert('请填写座位号'); return }
+    setActing(true)
+    const res  = await fetch(`/api/admin/timers/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_table', table_number: tableEdit }),
+    })
+    const data = await res.json() as { session?: TimerSession; error?: string }
+    if (!res.ok) { alert(data.error ?? '座位号更新失败'); setActing(false); return }
+    setSession(data.session!)
+    setTableEdit(data.session!.table_number ?? '')
     setActing(false)
   }
 
@@ -115,7 +134,10 @@ export default function AdminTimerDetailPage() {
   const liveBill       = calcBill(liveBillingMin)
 
   const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.tangdouren.co.uk'
-  const shareUrl = `${appUrl}/timer/${session.session_id}`
+  const sharePath = session.created_via === 'self_service'
+    ? `/self-timer/session/${session.session_id}`
+    : `/timer/${session.session_id}`
+  const shareUrl = `${appUrl}${sharePath}`
 
   const statusColors: Record<string, string> = {
     idle:      'bg-stone-100 text-stone-500',
@@ -125,6 +147,9 @@ export default function AdminTimerDetailPage() {
   }
   const statusLabels: Record<string, string> = {
     idle: '未开始', running: '计时中', paused: '已暂停', completed: '已完成',
+  }
+  const sourceLabels: Record<string, string> = {
+    admin: '后台创建', booking: '预约创建', self_service: '顾客自助',
   }
 
   return (
@@ -151,11 +176,34 @@ export default function AdminTimerDetailPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-stone-800">{session.session_id}</h1>
-          <p className="text-sm text-stone-500 mt-0.5">{session.customer_name}</p>
+          <p className="text-sm text-stone-500 mt-0.5">
+            {session.customer_name} · {session.table_number ?? '未填座位号'} · {sourceLabels[session.created_via ?? 'admin'] ?? '后台创建'}
+          </p>
         </div>
         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[session.status]}`}>
           {statusLabels[session.status]}
         </span>
+      </div>
+
+      {/* Table correction */}
+      <div className="bg-white rounded-2xl border border-stone-100 px-5 py-4 shadow-sm">
+        <p className="text-xs font-medium text-stone-400 uppercase mb-3">座位号</p>
+        <div className="flex gap-2">
+          <input
+            value={tableEdit}
+            onChange={e => setTableEdit(e.target.value.toUpperCase())}
+            placeholder="例如 S1 / D2A / F1C"
+            className="flex-1 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta"
+          />
+          <button
+            onClick={updateTable}
+            disabled={acting || tableEdit.trim().toUpperCase() === (session.table_number ?? '')}
+            className="rounded-xl bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-50 transition"
+          >
+            保存
+          </button>
+        </div>
+        <p className="text-xs text-stone-400 mt-2">用于处理顾客误选/误填座位号；S 为单人座，D 有 A/B，F 有 A/B/C/D。</p>
       </div>
 
       {/* Elapsed time */}

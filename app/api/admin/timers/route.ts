@@ -3,24 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-
-// 生成 PB-YYYYMMDD-NNN 格式的 session_id（使用伦敦本地日期）
-async function generateSessionId(admin: ReturnType<typeof createAdminClient>): Promise<string> {
-  const london = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/London',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date())
-  const dateStr = london.replace(/-/g, '')       // YYYYMMDD
-  const prefix  = `PB-${dateStr}-`
-
-  const { count } = await admin
-    .from('timer_sessions')
-    .select('*', { count: 'exact', head: true })
-    .like('session_id', `${prefix}%`)
-
-  const seq = String((count ?? 0) + 1).padStart(3, '0')
-  return `${prefix}${seq}`
-}
+import { generateTimerSessionId } from '@/lib/timer/sessionId'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -40,19 +23,27 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient()
 
-  // 如果关联了预约，获取顾客姓名
+  // 如果关联了预约，获取顾客姓名和桌号
   let resolvedName = customerName?.trim() ?? ''
+  let tableNumber: string | null = null
   if (bookingId && !resolvedName) {
     const { data: booking } = await admin
       .from('bookings')
-      .select('customer_name')
+      .select('customer_name, assigned_table_code')
       .eq('booking_id', bookingId)
       .single()
     resolvedName = booking?.customer_name ?? ''
+    tableNumber  = booking?.assigned_table_code ?? null
+  } else if (bookingId) {
+    const { data: booking } = await admin
+      .from('bookings')
+      .select('assigned_table_code')
+      .eq('booking_id', bookingId)
+      .single()
+    tableNumber = booking?.assigned_table_code ?? null
   }
 
-  const sessionId = await generateSessionId(admin)
-  const now       = new Date().toISOString()
+  const sessionId = await generateTimerSessionId(admin)
 
   const { data, error } = await admin
     .from('timer_sessions')
@@ -60,7 +51,9 @@ export async function POST(request: NextRequest) {
       session_id:    sessionId,
       booking_id:    bookingId ?? null,
       customer_name: resolvedName,
+      table_number:  tableNumber,
       status:        'idle',
+      created_via:   bookingId ? 'booking' : 'admin',
       created_by:    user.email ?? user.id,
     })
     .select()

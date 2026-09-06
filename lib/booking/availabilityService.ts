@@ -31,22 +31,23 @@ const cfg = BUSINESS_CONFIG
 
 // ── DB 行 → ExistingBooking 映射 ─────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function mapDbRowToExisting(row: any): ExistingBooking {
+type BookingDbRow = Record<string, unknown>
+
+export function mapDbRowToExisting(row: BookingDbRow): ExistingBooking {
   return {
-    bookingId:         row.booking_id,
-    bookingDate:       row.booking_date,
-    startTime:         row.start_time,
-    endTime:           row.end_time,
-    bufferedEndTime:   row.buffered_end_time,
-    partySize:         row.party_size,
-    acceptsSharing:    row.accepts_sharing,
-    assignedTableId:   row.assigned_table_id,
-    assignedTableCode: row.assigned_table_code,
+    bookingId:         row.booking_id as string,
+    bookingDate:       row.booking_date as string,
+    startTime:         row.start_time as string,
+    endTime:           row.end_time as string,
+    bufferedEndTime:   row.buffered_end_time as string,
+    partySize:         row.party_size as number,
+    acceptsSharing:    row.accepts_sharing as boolean,
+    assignedTableId:   row.assigned_table_id as string,
+    assignedTableCode: row.assigned_table_code as string,
     assignedTableType: row.assigned_table_type as TableType,
-    bookingMode:       row.booking_mode,
-    seatGroupType:     row.seat_group_type,
-    status:            row.status,
+    bookingMode:       row.booking_mode as ExistingBooking['bookingMode'],
+    seatGroupType:     row.seat_group_type as ExistingBooking['seatGroupType'],
+    status:            row.status as ExistingBooking['status'],
   }
 }
 

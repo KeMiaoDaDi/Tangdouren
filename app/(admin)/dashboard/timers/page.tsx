@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { formatHMS } from '@/lib/timer/pricing'
+import { calcBill, calcBillingMinutes, formatHMS } from '@/lib/timer/pricing'
 import Sidebar from '@/components/admin/Sidebar'
 
 interface TimerSession {
@@ -10,17 +10,26 @@ interface TimerSession {
   customer_name:   string
   status:          'idle' | 'running' | 'paused' | 'completed'
   started_at:      string | null
+  paused_at:       string | null
+  total_paused_ms: number
   stopped_at:      string | null
   elapsed_minutes: number | null
   amount_gbp:      number | null
   booking_id:      string | null
+  table_number:    string | null
+  created_via:     'admin' | 'booking' | 'self_service' | null
 }
 
 function calcLiveElapsed(s: TimerSession): number {
   if (s.status === 'idle') return 0
   if (s.status === 'completed' && s.elapsed_minutes !== null) return s.elapsed_minutes * 60
   if (!s.started_at) return 0
-  return Math.max(0, (Date.now() - new Date(s.started_at).getTime()) / 1000)
+  const started = new Date(s.started_at).getTime()
+  const totalPaused = s.total_paused_ms ?? 0
+  if (s.status === 'paused' && s.paused_at) {
+    return Math.max(0, (new Date(s.paused_at).getTime() - started - totalPaused) / 1000)
+  }
+  return Math.max(0, (Date.now() - started - totalPaused) / 1000)
 }
 
 const statusMeta: Record<string, { label: string; color: string }> = {
@@ -28,6 +37,12 @@ const statusMeta: Record<string, { label: string; color: string }> = {
   running:   { label: '计时中', color: 'bg-emerald-100 text-emerald-700' },
   paused:    { label: '已暂停', color: 'bg-amber-100 text-amber-700' },
   completed: { label: '已完成', color: 'bg-stone-100 text-stone-500' },
+}
+
+const sourceLabels: Record<string, string> = {
+  admin: '后台',
+  booking: '预约',
+  self_service: '自助',
 }
 
 export default function TimersListPage() {
@@ -205,11 +220,18 @@ export default function TimersListPage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-medium text-stone-800 text-sm truncate">{s.customer_name}</span>
+                          {s.table_number && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium shrink-0">
+                              {s.table_number}
+                            </span>
+                          )}
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${meta.color}`}>
                             {meta.label}
                           </span>
                         </div>
-                        <p className="text-xs text-stone-400">{s.session_id}</p>
+                        <p className="text-xs text-stone-400">
+                          {s.session_id} · {sourceLabels[s.created_via ?? 'admin'] ?? '后台'}
+                        </p>
                       </div>
                       <div className="text-right shrink-0 ml-3">
                         <p className="font-mono text-base font-semibold text-stone-700">
@@ -217,6 +239,11 @@ export default function TimersListPage() {
                         </p>
                         {s.status === 'completed' && s.amount_gbp != null && (
                           <p className="text-xs font-bold text-terracotta">£{s.amount_gbp.toFixed(2)}</p>
+                        )}
+                        {s.status !== 'completed' && s.status !== 'idle' && (
+                          <p className="text-xs font-bold text-terracotta">
+                            £{calcBill(calcBillingMinutes(Math.floor(liveElapsed / 60))).totalGbp.toFixed(2)} 预估
+                          </p>
                         )}
                       </div>
                     </button>
