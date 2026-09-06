@@ -95,23 +95,34 @@ export default function ImageLightbox({ images, initialIndex, onClose }: ImageLi
         </button>
       </div>
 
-      {/* 图片区：原生捏合缩放，左右滑动翻页，点空白关闭 */}
+      {/* 图片区：原生捏合缩放，左右滑动翻页（平滑过渡），点空白关闭 */}
       <div
-        className="flex min-h-0 flex-1 items-center justify-center px-2"
-        onClick={onImageAreaClick}
+        className="min-h-0 flex-1 overflow-hidden"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          key={images[index]}
-          src={images[index]}
-          alt={lang === 'zh' ? `拼豆图片教程第 ${index + 1} 步` : `Bead art tutorial step ${index + 1}`}
-          className="max-h-full max-w-full object-contain"
-          draggable={false}
-          onClick={e => e.stopPropagation()}
-        />
+        <div
+          className="flex h-full transition-transform duration-300 ease-out"
+          style={{ transform: `translateX(-${index * 100}%)` }}
+        >
+          {images.map((src, i) => (
+            <div
+              key={src}
+              onClick={onImageAreaClick}
+              className="flex h-full w-full shrink-0 items-center justify-center"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={src}
+                alt={lang === 'zh' ? `拼豆图片教程第 ${i + 1} 步` : `Bead art tutorial step ${i + 1}`}
+                className="max-h-full max-w-full object-contain"
+                draggable={false}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* 底部提示 */}
