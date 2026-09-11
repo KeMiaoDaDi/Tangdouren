@@ -3,7 +3,8 @@
 // ============================================================
 import { sendEmail } from '@/lib/email/sender'
 
-const ADMIN_EMAIL = 'guwenhao2001@gmail.com'
+// 管理员通知邮箱：新增收件邮箱时，往这个数组里加一项即可
+const ADMIN_EMAILS = ['guwenhao2001@gmail.com', 'zwei2003@outlook.com']
 
 export interface AdminNotifyData {
   bookingId:    string
@@ -76,7 +77,7 @@ export async function notifyAdminNewBooking(data: AdminNotifyData): Promise<void
 </body></html>`.trim()
 
   try {
-    await sendEmail({ to: ADMIN_EMAIL, subject, html })
+    await sendEmail({ to: ADMIN_EMAILS, subject, html })
   } catch (e) {
     console.error('[notifyAdmin] 管理员通知邮件发送失败:', e)
   }

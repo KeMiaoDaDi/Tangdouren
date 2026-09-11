@@ -25,7 +25,7 @@ export interface SendResult {
 }
 
 export async function sendEmail(params: {
-  to: string
+  to: string | string[]
   subject: string
   html: string
 }): Promise<SendResult> {
