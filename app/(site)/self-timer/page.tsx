@@ -7,7 +7,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext'
 import { getSeatOptionsForTable, SELF_SERVICE_TABLE_CODES } from '@/lib/timer/selfServiceCore'
 import ImageLightbox from '@/components/site/ImageLightbox'
 
-type Phase = 'home' | 'tutorial' | 'form' | 'confirm'
+type Phase = 'home' | 'tutorial' | 'form' | 'confirm' | 'lookup'
 
 const SESSION_LS_KEY = 'tangdouren_self_timer_session_id'
 
@@ -41,6 +41,12 @@ const copy = {
     contactStaff: '如需暂停或结束计时，请联系店员。',
     guestOnly: '本期为本次体验计时；暂不收集邮箱或累计会员时长。',
     tapToZoom: '点击放大',
+    lookupTitle: '查询我的计时',
+    lookupHint: '填写开始计时时的座位号与名字，找回进行中的计时。',
+    lookupSeatPlaceholder: '座位号（如 D1-A）',
+    lookupNamePlaceholder: '开始计时时填写的名字',
+    lookupSubmit: '查询',
+    lookupNotFound: '未找到进行中的计时，请检查座位号与名字是否正确。',
   },
   en: {
     badge: 'In-store self timer',
@@ -69,6 +75,12 @@ const copy = {
     contactStaff: 'Please contact staff if you need to pause or finish.',
     guestOnly: 'This version is for one-off session timing only. Email collection and member history are not enabled yet.',
     tapToZoom: 'Tap to zoom',
+    lookupTitle: 'Find my timer',
+    lookupHint: 'Enter the seat number and name you used when starting your timer.',
+    lookupSeatPlaceholder: 'Seat number (e.g. D1-A)',
+    lookupNamePlaceholder: 'The name you entered',
+    lookupSubmit: 'Find',
+    lookupNotFound: 'No active timer found. Please check the seat number and name.',
   },
 } as const
 
@@ -91,6 +103,8 @@ export default function SelfTimerPage() {
   const [loading, setLoading] = useState(false)
   const [tutorialStep, setTutorialStep] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lookupSeat, setLookupSeat] = useState('')
+  const [lookupName, setLookupName] = useState('')
   const idempotencyKey = useMemo(makeIdempotencyKey, [])
 
   useEffect(() => {
@@ -126,6 +140,27 @@ export default function SelfTimerPage() {
     } finally { setLoading(false) }
   }
 
+  async function lookupTimer() {
+    if (!lookupSeat.trim() || !lookupName.trim()) {
+      setError(lang === 'zh' ? '请填写座位号与名字' : 'Please enter your seat number and name')
+      return
+    }
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/self-timer/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seatNumber: lookupSeat, customerName: lookupName }),
+      })
+      const data = await res.json().catch(() => ({})) as { sessionId?: string }
+      if (!res.ok || !data.sessionId) { setError(c.lookupNotFound); return }
+      router.push(`/self-timer/session/${data.sessionId}`)
+    } catch {
+      setError(c.lookupNotFound)
+    } finally { setLoading(false) }
+  }
+
   const inputCls = 'w-full rounded-2xl border border-sand-200 bg-white px-4 py-3 text-sm text-charcoal placeholder:text-charcoal-light/50 focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/20'
   const chipCls = (selected: boolean) =>
     selected
@@ -147,6 +182,7 @@ export default function SelfTimerPage() {
             {savedSessionId && <button className="btn-secondary w-full" onClick={() => router.push(`/self-timer/session/${savedSessionId}`)}>{c.restore}</button>}
             <button className="btn-primary w-full" onClick={() => setPhase('form')}>{c.start}</button>
             <button className="btn-secondary w-full" onClick={() => setPhase('tutorial')}>{c.tutorial}</button>
+            <button className="btn-secondary w-full" onClick={() => { setError(''); setPhase('lookup') }}>{c.lookupTitle}</button>
             <p className="text-center text-xs text-stone-400">{c.contactStaff}</p>
           </div>
         )}
@@ -253,6 +289,24 @@ export default function SelfTimerPage() {
             </label>
             {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
             <button className="btn-primary w-full" onClick={() => { const msg = validateForm(); if (msg) setError(msg); else setPhase('confirm') }}>{c.continue}</button>
+          </div>
+        )}
+
+        {phase === 'lookup' && (
+          <div className="card p-5 space-y-4">
+            <h2 className="font-display text-xl font-semibold text-charcoal">{c.lookupTitle}</h2>
+            <p className="text-sm leading-6 text-charcoal-light">{c.lookupHint}</p>
+            <label className="block">
+              <span className="label">{c.seatLabel}</span>
+              <input className={inputCls} value={lookupSeat} onChange={e => setLookupSeat(e.target.value)} placeholder={c.lookupSeatPlaceholder} />
+            </label>
+            <label className="block">
+              <span className="label">{c.name}</span>
+              <input className={inputCls} value={lookupName} onChange={e => setLookupName(e.target.value)} placeholder={c.lookupNamePlaceholder} />
+            </label>
+            {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <button className="btn-primary w-full" onClick={lookupTimer} disabled={loading}>{c.lookupSubmit}</button>
+            <button className="btn-ghost w-full" onClick={() => { setError(''); setPhase('home') }}>{c.confirmBack}</button>
           </div>
         )}
 

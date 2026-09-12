@@ -138,3 +138,34 @@ export async function getSelfTimerSession(admin: AdminClient, sessionId: string)
     created_via: data.created_via,
   }
 }
+
+export interface LookupActiveTimerResult {
+  sessionId: string
+}
+
+// 按「座位号 + 名字」找回仍在进行中的自助计时单（用于客人退出后重新扫码找回界面）
+export async function lookupActiveTimer(
+  admin: AdminClient,
+  seatNumber: string,
+  customerName: string,
+): Promise<LookupActiveTimerResult | null> {
+  const normalizedSeat = seatNumber.trim().toUpperCase()
+  const normalizedName = customerName.trim().toLowerCase()
+  if (!normalizedSeat || !normalizedName) return null
+
+  const { data, error } = await admin
+    .from('timer_sessions')
+    .select('session_id, customer_name')
+    .eq('table_number', normalizedSeat)
+    .eq('created_via', 'self_service')
+    .in('status', ['idle', 'running', 'paused'])
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  if (error) throw new Error('LOOKUP_FAILED')
+
+  const match = (data ?? []).find(
+    row => (row.customer_name ?? '').trim().toLowerCase() === normalizedName,
+  )
+  return match?.session_id ? { sessionId: match.session_id as string } : null
+}
