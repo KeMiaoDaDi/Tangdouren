@@ -31,7 +31,10 @@ const copy = {
     namePlaceholder: '希望我们怎么称呼您',
     continue: '继续',
     confirmTitle: '开始前请确认',
-    confirmWarning: '请勿撒豆或混豆，否则将收取 £2/瓶整理费。',
+    confirmWarnings: [
+      '如需要特殊烫（格丽特细闪烫/澡巾烫），请镜像翻转图纸后开始拼豆，普通单面无孔则无需调整。',
+      '请勿撒豆或混豆，否则将收取 £2/瓶整理费。',
+    ],
     confirmBack: '返回主页',
     confirmStart: '确认并开始计时',
     starting: '正在开始…',
@@ -56,7 +59,10 @@ const copy = {
     namePlaceholder: 'Enter your name',
     continue: 'Continue',
     confirmTitle: 'Please confirm before starting',
-    confirmWarning: 'Please do not spill or mix beads, otherwise a £2/bottle sorting fee will be charged.',
+    confirmWarnings: [
+      'If a special effect is needed (glitter shimmer effect / bath towel effect), mirror-flip the pattern before starting; plain single-sided beads (no holes) need no adjustment.',
+      'Please do not spill or mix beads, otherwise a £2/bottle sorting fee will be charged.',
+    ],
     confirmBack: 'Back to home',
     confirmStart: 'Confirm & Start Timer',
     starting: 'Starting…',
@@ -121,6 +127,10 @@ export default function SelfTimerPage() {
   }
 
   const inputCls = 'w-full rounded-2xl border border-sand-200 bg-white px-4 py-3 text-sm text-charcoal placeholder:text-charcoal-light/50 focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/20'
+  const chipCls = (selected: boolean) =>
+    selected
+      ? 'rounded-xl border border-terracotta bg-terracotta px-3 py-2 text-sm font-medium text-white shadow-sm'
+      : 'rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm text-charcoal hover:border-terracotta/50 hover:text-terracotta'
   const seatOptions = getSeatOptionsForTable(tableNumber)
 
   return (
@@ -201,29 +211,42 @@ export default function SelfTimerPage() {
         {phase === 'form' && (
           <div className="card p-5 space-y-4">
             <p className="rounded-2xl bg-stone-50 px-4 py-3 text-xs leading-5 text-stone-500">{c.guestOnly}</p>
-            <label className="block">
+            <div>
               <span className="label">{c.tableLabel}</span>
-              <select
-                className={inputCls}
-                value={tableNumber}
-                onChange={e => { setTableNumber(e.target.value); setSeatNumber('') }}
-              >
-                <option value="">{c.chooseTable}</option>
-                {tableCodes.map(code => <option key={code} value={code}>{code}</option>)}
-              </select>
-            </label>
-            <label className="block">
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tableCodes.map(code => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => { setTableNumber(code); setSeatNumber('') }}
+                    className={chipCls(tableNumber === code)}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
               <span className="label">{c.seatLabel}</span>
-              <select
-                className={inputCls}
-                value={seatNumber}
-                onChange={e => setSeatNumber(e.target.value)}
-                disabled={!tableNumber}
-              >
-                <option value="">{c.chooseSeat}</option>
-                {seatOptions.map(code => <option key={code} value={code}>{code}</option>)}
-              </select>
-            </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(tableNumber ? seatOptions : ['A', 'B', 'C', 'D']).map(code => {
+                  const disabled = !tableNumber
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setSeatNumber(code)}
+                      className={disabled
+                        ? 'cursor-not-allowed rounded-xl border border-sand-200 bg-stone-100 px-3 py-2 text-sm text-stone-400'
+                        : chipCls(seatNumber === code)}
+                    >
+                      {code}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <label className="block">
               <span className="label">{c.name}</span>
               <input className={inputCls} value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={c.namePlaceholder} />
@@ -236,7 +259,13 @@ export default function SelfTimerPage() {
         {phase === 'confirm' && (
           <div className="card p-5 space-y-4">
             <h2 className="font-display text-xl font-semibold text-charcoal">{c.confirmTitle}</h2>
-            <div className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">{c.confirmWarning}</div>
+            <div className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+              <ol className="list-decimal list-inside space-y-1">
+                {c.confirmWarnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ol>
+            </div>
             <div className="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-charcoal-light">
               <p>{c.tableLabel}: <strong className="text-charcoal">{tableNumber}</strong></p>
               <p>{c.seatLabel}: <strong className="text-charcoal">{seatNumber}</strong></p>
