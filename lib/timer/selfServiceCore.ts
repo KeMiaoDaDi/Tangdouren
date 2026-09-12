@@ -1,5 +1,5 @@
 export const SELF_SERVICE_TABLE_CODES = [
-  'S1', 'S2', 'S3', 'S4', 'S5', 'S6',
+  'S1', 'S2', 'S3',
   'D1', 'D2', 'D3', 'D4',
   'F1', 'F2',
 ] as const
@@ -26,9 +26,9 @@ export function getSeatOptionsForTable(tableCode: string): string[] {
   const normalized = normalizeTableCode(tableCode)
   if (!normalized || !isValidSelfServiceTable(normalized)) return []
 
-  if (normalized.startsWith('S')) return [normalized]
-  if (normalized.startsWith('D')) return DOUBLE_SEAT_SUFFIXES.map(suffix => `${normalized}${suffix}`)
-  if (normalized.startsWith('F')) return FOUR_SEAT_SUFFIXES.map(suffix => `${normalized}${suffix}`)
+  if (normalized.startsWith('S')) return [`${normalized}-A`]
+  if (normalized.startsWith('D')) return DOUBLE_SEAT_SUFFIXES.map(suffix => `${normalized}-${suffix}`)
+  if (normalized.startsWith('F')) return FOUR_SEAT_SUFFIXES.map(suffix => `${normalized}-${suffix}`)
   return []
 }
 
