@@ -42,8 +42,7 @@ const copy = {
     guestOnly: '本期为本次体验计时；暂不收集邮箱或累计会员时长。',
     tapToZoom: '点击放大',
     lookupTitle: '查询我的计时',
-    lookupHint: '填写开始计时时的座位号与名字，找回进行中的计时。',
-    lookupSeatPlaceholder: '座位号（如 D1-A）',
+    lookupHint: '选择开始计时时的座位号并填写名字，找回进行中的计时。',
     lookupNamePlaceholder: '开始计时时填写的名字',
     lookupSubmit: '查询',
     lookupNotFound: '未找到进行中的计时，请检查座位号与名字是否正确。',
@@ -76,8 +75,7 @@ const copy = {
     guestOnly: 'This version is for one-off session timing only. Email collection and member history are not enabled yet.',
     tapToZoom: 'Tap to zoom',
     lookupTitle: 'Find my timer',
-    lookupHint: 'Enter the seat number and name you used when starting your timer.',
-    lookupSeatPlaceholder: 'Seat number (e.g. D1-A)',
+    lookupHint: 'Choose the seat number and enter the name you used when starting your timer.',
     lookupNamePlaceholder: 'The name you entered',
     lookupSubmit: 'Find',
     lookupNotFound: 'No active timer found. Please check the seat number and name.',
@@ -103,6 +101,7 @@ export default function SelfTimerPage() {
   const [loading, setLoading] = useState(false)
   const [tutorialStep, setTutorialStep] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lookupTable, setLookupTable] = useState('')
   const [lookupSeat, setLookupSeat] = useState('')
   const [lookupName, setLookupName] = useState('')
   const idempotencyKey = useMemo(makeIdempotencyKey, [])
@@ -141,8 +140,8 @@ export default function SelfTimerPage() {
   }
 
   async function lookupTimer() {
-    if (!lookupSeat.trim() || !lookupName.trim()) {
-      setError(lang === 'zh' ? '请填写座位号与名字' : 'Please enter your seat number and name')
+    if (!lookupSeat || !lookupName.trim()) {
+      setError(lang === 'zh' ? '请选择座位号并填写名字' : 'Please choose your seat and enter your name')
       return
     }
     setError('')
@@ -167,6 +166,7 @@ export default function SelfTimerPage() {
       ? 'rounded-xl border border-terracotta bg-terracotta px-3 py-2 text-sm font-medium text-white shadow-sm'
       : 'rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm text-charcoal hover:border-terracotta/50 hover:text-terracotta'
   const seatOptions = getSeatOptionsForTable(tableNumber)
+  const lookupSeatOptions = getSeatOptionsForTable(lookupTable)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-cream-100 via-orange-50 to-rose-50 px-4 pb-24 pt-24">
@@ -296,10 +296,42 @@ export default function SelfTimerPage() {
           <div className="card p-5 space-y-4">
             <h2 className="font-display text-xl font-semibold text-charcoal">{c.lookupTitle}</h2>
             <p className="text-sm leading-6 text-charcoal-light">{c.lookupHint}</p>
-            <label className="block">
+            <div>
+              <span className="label">{c.tableLabel}</span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tableCodes.map(code => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => { setLookupTable(code); setLookupSeat('') }}
+                    className={chipCls(lookupTable === code)}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
               <span className="label">{c.seatLabel}</span>
-              <input className={inputCls} value={lookupSeat} onChange={e => setLookupSeat(e.target.value)} placeholder={c.lookupSeatPlaceholder} />
-            </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(lookupTable ? lookupSeatOptions : ['A', 'B', 'C', 'D']).map(code => {
+                  const disabled = !lookupTable
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setLookupSeat(code)}
+                      className={disabled
+                        ? 'cursor-not-allowed rounded-xl border border-sand-200 bg-stone-100 px-3 py-2 text-sm text-stone-400'
+                        : chipCls(lookupSeat === code)}
+                    >
+                      {code}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <label className="block">
               <span className="label">{c.name}</span>
               <input className={inputCls} value={lookupName} onChange={e => setLookupName(e.target.value)} placeholder={c.lookupNamePlaceholder} />

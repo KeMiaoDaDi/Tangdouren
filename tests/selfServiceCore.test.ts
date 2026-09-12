@@ -6,6 +6,7 @@ import {
   normalizeTableCode,
   isValidSelfServiceTable,
   normalizeSeatCode,
+  normalizeSeatForLookup,
 } from '../lib/timer/selfServiceCore.ts'
 
 test('normalizeTableCode accepts table codes case-insensitively', () => {
@@ -35,4 +36,15 @@ test('normalizeSeatCode validates seat code against selected table', () => {
   assert.equal(isValidSelfServiceSeat('S1', 'S1-A'), true)
   assert.equal(isValidSelfServiceSeat('S1', 'S1-B'), false)
   assert.equal(isValidSelfServiceSeat('F1', 'F2-A'), false)
+})
+
+test('normalizeSeatForLookup unifies old and dash seat formats', () => {
+  assert.equal(normalizeSeatForLookup('D1-A'), 'D1-A')
+  assert.equal(normalizeSeatForLookup('D1A'), 'D1-A')
+  assert.equal(normalizeSeatForLookup(' d1-a '), 'D1-A')
+  assert.equal(normalizeSeatForLookup('S1'), 'S1-A')
+  assert.equal(normalizeSeatForLookup('S1-A'), 'S1-A')
+  assert.equal(normalizeSeatForLookup('F2C'), 'F2-C')
+  assert.equal(normalizeSeatForLookup('XYZ'), null)
+  assert.equal(normalizeSeatForLookup('D1-C'), 'D1-C')
 })

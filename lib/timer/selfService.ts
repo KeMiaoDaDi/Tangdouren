@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateTimerSessionId } from '@/lib/timer/sessionId'
-import { normalizeSeatCode, normalizeTableCode, SELF_SERVICE_TABLE_CODES } from '@/lib/timer/selfServiceCore'
+import { normalizeSeatCode, normalizeTableCode, normalizeSeatForLookup, SELF_SERVICE_TABLE_CODES } from '@/lib/timer/selfServiceCore'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -149,23 +149,25 @@ export async function lookupActiveTimer(
   seatNumber: string,
   customerName: string,
 ): Promise<LookupActiveTimerResult | null> {
-  const normalizedSeat = seatNumber.trim().toUpperCase()
+  const normalizedSeat = normalizeSeatForLookup(seatNumber)
   const normalizedName = customerName.trim().toLowerCase()
   if (!normalizedSeat || !normalizedName) return null
 
+  const tableCode = normalizedSeat.split('-')[0]
   const { data, error } = await admin
     .from('timer_sessions')
-    .select('session_id, customer_name')
-    .eq('table_number', normalizedSeat)
+    .select('session_id, customer_name, table_number')
     .eq('created_via', 'self_service')
     .in('status', ['idle', 'running', 'paused'])
+    .ilike('table_number', `${tableCode}%`)
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(20)
 
   if (error) throw new Error('LOOKUP_FAILED')
 
   const match = (data ?? []).find(
-    row => (row.customer_name ?? '').trim().toLowerCase() === normalizedName,
+    row => normalizeSeatForLookup(row.table_number ?? '') === normalizedSeat
+      && (row.customer_name ?? '').trim().toLowerCase() === normalizedName,
   )
   return match?.session_id ? { sessionId: match.session_id as string } : null
 }

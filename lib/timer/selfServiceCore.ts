@@ -43,3 +43,13 @@ export function normalizeSeatCode(tableCode: string, seatCode: string): string |
 export function isValidSelfServiceSeat(tableCode: string, seatCode: string): boolean {
   return normalizeSeatCode(tableCode, seatCode) !== null
 }
+
+// 将新旧座位号统一为「桌号-字母」规范形式，用于查询比对（忽略 - 的差异）
+// "D1-A" / "D1A" → "D1-A"；"S1" / "S1-A" → "S1-A"
+export function normalizeSeatForLookup(value: string): string | null {
+  const v = value.trim().toUpperCase().replace(/[-\s]+/g, '')
+  if (!v) return null
+  const m = v.match(/^([SDF]\d+)([A-D])?$/)
+  if (!m) return null
+  return `${m[1]}-${m[2] ?? 'A'}`
+}
