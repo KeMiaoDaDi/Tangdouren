@@ -1,6 +1,6 @@
 # 糖豆人手工工作室 官网 + 糖豆人会员系统
 
-这是 [糖豆人手工工作室官网](https://github.com/KeMiaoDaDi/Tangdouren) 的一份完整副本，包含 **糖豆人会员系统**的完整实现。克隆下来装好依赖、填好环境变量、在 Supabase 执行两个迁移，就能在本地跑起来。
+糖豆人手工工作室的官网，含 **糖豆人会员系统**的完整实现。装好依赖、填好环境变量、在 Supabase 执行两个迁移，就能在本地跑起来。
 
 技术栈：Next.js 16（App Router）、TypeScript、Supabase、Tailwind CSS。
 
