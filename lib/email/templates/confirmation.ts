@@ -64,7 +64,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
   // 加入会员只在中文预约里发生（英文版不开放会员），所以这一句只有中文版
   const memberBadge = memberJoined && !isEn
     ? `<div style="background:#fdf1ee;border:1px solid #f3d6cd;border-radius:8px;padding:12px 16px;margin-bottom:24px;font-size:14px;color:#8a4a35;line-height:1.6;">
-        🎉 你已加入<strong>糖豆人会员</strong>：每次到店计时都累积进度，满 2 次得 £2 抵用券，满 5 次得 £5，满 10 次解锁 VIP 月卡。到店扫桌上的二维码，就能在自己的手机上查看进度。
+        🎉 你已加入<strong>糖豆人会员</strong>：每次到店计时都累积进度，满 3 次打 9 折，满 5 次 8 折，满 7 次 7 折，满 10 次 5 折。到店扫桌上的二维码，就能在自己的手机上查看进度。
       </div>`
     : ''
 

@@ -49,7 +49,7 @@ const copy = {
     lookupSubmit: '查询',
     lookupNotFound: '未找到进行中的计时，请检查座位号与名字是否正确。',
     club: '糖豆人会员',
-    clubIntro: '每次到店计时都会累积进度，满 2 次就有 £2 抵用券，满 10 次解锁 VIP 月卡。',
+    clubIntro: '每次到店计时都会累积进度，满 3 次打 9 折，满 5 次 8 折，满 7 次 7 折，满 10 次 5 折。',
     clubWelcome: (name: string) => `欢迎回来，${name}`,
     clubContinue: (name: string) => `继续以 ${name} 的身份`,
     clubSwitch: '换一个账户',
