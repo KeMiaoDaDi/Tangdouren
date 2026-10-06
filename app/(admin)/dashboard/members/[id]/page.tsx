@@ -1,15 +1,15 @@
 'use client'
 
-// 后台会员详情（PRD 16）：能挂订单、核销/转赠、代激活 VIP、停用；
+// 后台会员详情（PRD 16）：能挂订单、核销、停用；
 // 不能手动加减 Visit、不能直接改 Reward Progress、不能改邮箱、不能删历史。
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Crown, Gift, Link2 } from 'lucide-react'
+import { ArrowLeft, Gift, Link2 } from 'lucide-react'
 import Sidebar from '@/components/admin/Sidebar'
 import MemberProgressBar from '@/components/member/MemberProgressBar'
 import type { MemberDashboard, MemberRewardEntry } from '@/lib/member/service'
-import { londonDateOf, vipRewardState, type RewardType } from '@/lib/member/member'
+import type { RewardType } from '@/lib/member/member'
 
 interface MemberRow {
   member_id:    string
@@ -20,26 +20,15 @@ interface MemberRow {
 }
 
 const rewardLabels: Record<RewardType, string> = {
-  TWO_POUND:       '£2 抵用券',
-  FIVE_POUND:      '£5 抵用券',
-  PERSONAL_15_OFF: '本人 85 折',
-  FRIEND_10_OFF:   '朋友 9 折',
-  VIP_MONTH:       'VIP 月卡',
-}
-
-/** VIP 月卡自身的状态由权益日期派生：未激活 / 生效中至 X / 已结束 */
-function vipBadge(entry: MemberRewardEntry): string {
-  const state = vipRewardState(entry.benefit, londonDateOf(new Date()))
-  if (state === 'active') return `生效中 · 至 ${entry.benefit?.expires_on ?? ''}`
-  if (state === 'ended')  return '已结束'
-  return '未激活'
+  P10_OFF: '9折',
+  P20_OFF: '8折',
+  P30_OFF: '7折',
+  P50_OFF: '5折',
 }
 
 const stateLabels: Record<string, string> = {
-  available:     '可用',
-  used:          '已使用',
-  paused_by_vip: 'VIP 生效中，需在柜台改用',
-  transferred:   '已转赠给朋友',
+  available: '可用',
+  used:      '已使用',
 }
 
 export default function MemberDetailPage() {
@@ -54,8 +43,6 @@ export default function MemberDetailPage() {
   const [notice, setNotice]       = useState('')
   const [nameEdit, setNameEdit]   = useState('')
   const [sessionId, setSessionId] = useState('')
-  const [couponCode, setCouponCode] = useState('')
-  const [couponFor, setCouponFor]   = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -98,9 +85,6 @@ export default function MemberDetailPage() {
 
   const fmt = (iso: string | null | undefined) =>
     iso ? new Date(iso).toLocaleString('zh-CN', { timeZone: 'Europe/London' }) : '—'
-
-  const readyVip    = (dashboard?.rewards ?? []).filter(r => r.reward.reward_type === 'VIP_MONTH' && !r.benefit?.activated_on)
-  const friendOpen  = (dashboard?.rewards ?? []).filter(r => r.reward.reward_type === 'FRIEND_10_OFF' && !r.reward.coupon_id && !r.reward.used_at)
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -164,29 +148,6 @@ export default function MemberDetailPage() {
                 />
               )}
 
-              {/* ── VIP Month ────────────────────────────────────────── */}
-              <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4 space-y-3">
-                <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Crown size={15} /> VIP 月卡</h2>
-                <p className="text-sm text-stone-600">
-                  {dashboard?.vip.active_expires_on
-                    ? `生效中，有效期至 ${dashboard.vip.active_expires_on}`
-                    : '当前没有生效中的 VIP 月卡'}
-                </p>
-                <p className="text-xs text-stone-400">
-                  VIP 月卡：未激活 {dashboard?.vip.ready_to_activate ?? 0} 张 · 历史激活过 {dashboard?.vip.activated ?? 0} 张
-                  （同一时间只能有一张生效，到期后不会自动续）
-                </p>
-                {readyVip.length > 0 && (
-                  <button
-                    onClick={() => act('activate_vip', { reward_id: readyVip[0].reward.reward_id }, 'vip')}
-                    disabled={busy === 'vip' || Boolean(dashboard?.vip.active_expires_on)}
-                    className="px-4 py-2 rounded-xl bg-terracotta text-white text-sm font-medium hover:bg-terracotta/90 disabled:opacity-50 transition"
-                  >
-                    {busy === 'vip' ? '激活中…' : '代为激活这张 VIP Month'}
-                  </button>
-                )}
-              </div>
-
               {/* ── 奖励 ─────────────────────────────────────────────── */}
               <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4 space-y-3">
                 <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Gift size={15} /> 奖励与记录</h2>
@@ -195,48 +156,16 @@ export default function MemberDetailPage() {
                     <li key={entry.reward.reward_id} className="rounded-xl border border-stone-100 px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-stone-700">{rewardLabels[entry.reward.reward_type]}</span>
-                        <span className="text-xs text-stone-500">
-                          {entry.reward.reward_type === 'VIP_MONTH'
-                            ? vipBadge(entry)
-                            : stateLabels[entry.state] ?? entry.state}
-                        </span>
+                        <span className="text-xs text-stone-500">{stateLabels[entry.state] ?? entry.state}</span>
                       </div>
                       <p className="text-xs text-stone-400 mt-0.5">
                         第 {entry.cycle_index} 轮 · {fmt(entry.reward.unlocked_at)} 解锁
                         {entry.reward.used_at && ` · ${fmt(entry.reward.used_at)} 使用`}
-                        {entry.reward.reward_type === 'VIP_MONTH' && entry.benefit?.activated_on && ` · ${entry.benefit.activated_on} 激活`}
-                        {entry.coupon_code && ` · 内部券 ${entry.coupon_code}`}
                       </p>
                     </li>
                   ))}
                   {(dashboard?.rewards ?? []).length === 0 && <li className="text-sm text-stone-400">还没有解锁奖励。</li>}
                 </ul>
-
-                {friendOpen.length > 0 && (
-                  <div className="rounded-xl border border-stone-100 bg-stone-50 px-3 py-3 space-y-2">
-                    <p className="text-xs text-stone-500">
-                      转赠朋友 9 折：先在优惠券页生成一张 10% 折扣的普通券，再把券码填在这里关联。关联后这张奖励不能再直接使用。
-                    </p>
-                    <div className="flex gap-2">
-                      <input
-                        value={couponFor === friendOpen[0].reward.reward_id ? couponCode : ''}
-                        onChange={e => { setCouponFor(friendOpen[0].reward.reward_id); setCouponCode(e.target.value.toUpperCase()) }}
-                        placeholder="TDXXXXXXXX"
-                        className="flex-1 border border-stone-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-terracotta/30"
-                      />
-                      <button
-                        onClick={async () => {
-                          const ok = await act('associate_friend_coupon', { reward_id: friendOpen[0].reward.reward_id, coupon_code: couponCode }, 'coupon')
-                          if (ok) { setNotice('已关联到该优惠券'); setCouponCode(''); setCouponFor('') }
-                        }}
-                        disabled={busy === 'coupon' || !couponCode.trim()}
-                        className="px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-medium hover:bg-stone-700 disabled:opacity-50 transition shrink-0"
-                      >
-                        {busy === 'coupon' ? '关联中…' : '关联优惠券'}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* ── 挂订单 ───────────────────────────────────────────── */}

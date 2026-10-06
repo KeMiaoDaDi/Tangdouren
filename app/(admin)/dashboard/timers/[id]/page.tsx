@@ -57,17 +57,14 @@ interface MemberSettleInfo {
   member_id:           string
   display_name:        string | null
   email:               string
-  vip_active:          boolean
-  vip_expires_on:      string | null
   usable_reward_types: RewardType[]
 }
 
 const memberRewardLabels: Record<RewardType, string> = {
-  TWO_POUND:       '£2 抵用券',
-  FIVE_POUND:      '£5 抵用券',
-  PERSONAL_15_OFF: '本人 85 折',
-  FRIEND_10_OFF:   '朋友 9 折',
-  VIP_MONTH:       'VIP 月卡',
+  P10_OFF: '9折',
+  P20_OFF: '8折',
+  P30_OFF: '7折',
+  P50_OFF: '5折',
 }
 
 function calcElapsed(session: TimerSession): number {
@@ -397,21 +394,14 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
   const [saving,     setSaving]     = useState(false)
   const [error,      setError]      = useState('')
   const [rewardType, setRewardType] = useState<RewardType | null>(null)
-  const [overrideVip, setOverrideVip] = useState(false)
-
-  // VIP 生效期间默认走 VIP 85 折；店员可以打开「改用其他优惠」手动改用券或奖励，
-  // 当次放弃 VIP 折扣，VIP 的 30 天不顺延（业主 2026-09-16 口径）
-  const vipActive  = Boolean(member?.vip_active)
-  const vipDefault = vipActive && !overrideVip
 
   /** 会员折扣的预览。金额规则与数据库复核用的是同一套（lib/member/member.ts） */
   const memberPreview = (() => {
     if (!member) return null
-    const effective: DiscountSource = vipDefault ? 'vip_month' : rewardType ? 'member_reward' : 'none'
+    const effective: DiscountSource = rewardType ? 'member_reward' : 'none'
     if (effective === 'none') return null
     const computed = computeMemberDiscount(effective, {
       amountGbp:  session.amount_gbp,
-      vipActive,
       rewardType,
     })
     return computed.ok ? computed.preview : null
@@ -524,18 +514,11 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
   }
 
   async function handleSettle() {
-    // 一次结算只能有一个折扣来源（PRD 21）
-    const effectiveSource: DiscountSource = vipDefault
-      ? 'vip_month'
-      : rewardType
-        ? 'member_reward'
-        : code.trim() ? 'coupon' : 'none'
+    // 一次结算只能有一个折扣来源
+    const effectiveSource: DiscountSource = rewardType
+      ? 'member_reward'
+      : code.trim() ? 'coupon' : 'none'
 
-    // 打开了「改用其他优惠」却什么都没选，等于让 VIP 会员按原价结账，这里先拦一道
-    if (vipActive && overrideVip && effectiveSource === 'none') {
-      setError('已打开「改用其他优惠」但还没选券或奖励。选一项，或点「恢复 VIP 85 折」')
-      return
-    }
     if (effectiveSource === 'coupon' && !preview) { setError('请先点击「验证」确认优惠码'); return }
     if (effectiveSource === 'member_reward' && !memberPreview) { setError('该会员奖励当前不可用'); return }
     setError('')
@@ -638,48 +621,28 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
       {member && (
         <div className="mb-4">
           <label className="block text-xs text-stone-400 mb-1">会员优惠</label>
-          {vipActive && (
-            <div className="rounded-xl border border-terracotta/30 bg-terracotta/5 px-3 py-2 text-sm text-stone-700">
-              <p>
-                VIP 月卡生效中{member.vip_expires_on ? `（至 ${member.vip_expires_on}）` : ''}，本单默认按 85 折结算。
-              </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => { setRewardType(null); setError('') }}
+              className={rewardType === null
+                ? 'px-3 py-1.5 rounded-xl bg-terracotta text-white text-sm font-medium'
+                : 'px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-600 text-sm hover:border-terracotta/40'}
+            >
+              不使用会员奖励
+            </button>
+            {member.usable_reward_types.map(rt => (
               <button
-                onClick={() => { setOverrideVip(v => !v); setRewardType(null); setCode(''); setPreview(null); setError('') }}
-                className="mt-2 px-3 py-1 rounded-xl border border-terracotta/40 bg-white text-xs font-medium text-terracotta hover:bg-terracotta/5"
-              >
-                {overrideVip ? '恢复 VIP 85 折' : '改用其他优惠'}
-              </button>
-              {overrideVip && (
-                <p className="mt-2 text-xs text-amber-700">
-                  本单不使用 VIP 折扣：下面选中的券或奖励会替代它，VIP 剩余天数不顺延。
-                </p>
-              )}
-            </div>
-          )}
-          {(!vipActive || overrideVip) && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => { setRewardType(null); setError('') }}
-                className={rewardType === null
+                key={rt}
+                onClick={() => { setRewardType(rt); setCode(''); setPreview(null); setError('') }}
+                className={rewardType === rt
                   ? 'px-3 py-1.5 rounded-xl bg-terracotta text-white text-sm font-medium'
                   : 'px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-600 text-sm hover:border-terracotta/40'}
               >
-                不使用会员奖励
+                {memberRewardLabels[rt]}
               </button>
-              {member.usable_reward_types.map(rt => (
-                <button
-                  key={rt}
-                  onClick={() => { setRewardType(rt); setCode(''); setPreview(null); setError('') }}
-                  className={rewardType === rt
-                    ? 'px-3 py-1.5 rounded-xl bg-terracotta text-white text-sm font-medium'
-                    : 'px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-600 text-sm hover:border-terracotta/40'}
-                >
-                  {memberRewardLabels[rt]}
-                </button>
-              ))}
-            </div>
-          )}
-          {(!vipActive || overrideVip) && member.usable_reward_types.length === 0 && (
+            ))}
+          </div>
+          {member.usable_reward_types.length === 0 && (
             <p className="mt-1 text-xs text-stone-400">该会员当前没有可用的奖励。</p>
           )}
           <p className="mt-1 text-xs text-stone-400">同类多张时系统自动核销最早解锁的一张；刚解锁的奖励要下一次消费才能用。</p>
@@ -693,14 +656,14 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
           <input
             className={inputCls + ' font-mono'}
             placeholder="TDXXXXXXXX"
-            disabled={vipDefault || rewardType !== null}
+            disabled={rewardType !== null}
             value={code}
             onChange={e => { setCode(e.target.value.toUpperCase()); setPreview(null); setError('') }}
             onKeyDown={e => e.key === 'Enter' && handleVerify()}
           />
           <button
             onClick={handleVerify}
-            disabled={verifying || !code.trim() || vipDefault || rewardType !== null}
+            disabled={verifying || !code.trim() || rewardType !== null}
             className="px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-medium hover:bg-stone-700 disabled:opacity-50 transition shrink-0"
           >
             {verifying ? '验证中…' : '验证'}

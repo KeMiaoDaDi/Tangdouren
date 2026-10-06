@@ -1,6 +1,14 @@
 // ============================================================
 // 会员：Visit 口径、奖励进度、奖励可用性与折扣计算的纯函数
-// 规则见《Tangdouren Club 会员系统 PRD v1》第 6、7、9、10、11、20、21 节
+//
+// 奖励机制（2026-10 改版）：每 10 个 Reward-eligible Visit 为一轮，
+// 到第 3 / 5 / 7 / 10 次各解锁一张「一次性百分比折扣」奖励：
+//   第 3 次 → 9折（10% off）
+//   第 5 次 → 8折（20% off）
+//   第 7 次 → 7折（30% off）
+//   第 10 次 → 5折（50% off）
+// 第 2 轮及以后靠 10 ×(轮次 - 1) + 档位 推到 13 / 15 / 17 / 20，无限循环。
+// 所有奖励都是「本人订单的百分比折扣」，核销一次即用掉，不可转赠。
 //
 // 约定：
 //   1) 金额一律换算成「便士整数」计算，与 lib/coupon/coupon.ts 同一套口径。
@@ -13,45 +21,37 @@ import { describeDiscount, londonToday, toPence, fromPence } from '../coupon/cou
 
 // ── 常量 ────────────────────────────────────────────────────────────────────
 
-/** 每 10 个 Reward-eligible Visit 为一轮（PRD 7） */
+/** 每 10 个 Reward-eligible Visit 为一轮 */
 export const REWARD_CYCLE_SIZE = 10
 
-/** 一个会员同时最多一张 VIP Month 生效（PRD 11.6） */
-export const MAX_ACTIVE_VIP_MONTHS = 1
-
-/** VIP Month 有效期 30 天含首尾：expires_on = activated_on + 29（PRD 11.2） */
-export const VIP_MONTH_DAYS = 30
-export const VIP_MONTH_OFFSET_DAYS = VIP_MONTH_DAYS - 1
-
-export const TWO_POUND_PENCE = 200
-export const FIVE_POUND_PENCE = 500
-
-/** 折扣百分比：本人 15%、朋友 10%、VIP 15%（PRD 10、11.3） */
-export const PERSONAL_DISCOUNT_PERCENT = 15
-export const FRIEND_DISCOUNT_PERCENT = 10
-export const VIP_DISCOUNT_PERCENT = 15
-
 export type RewardType =
-  | 'TWO_POUND'
-  | 'FIVE_POUND'
-  | 'PERSONAL_15_OFF'
-  | 'FRIEND_10_OFF'
-  | 'VIP_MONTH'
+  | 'P10_OFF'   // 9折 = 10% off
+  | 'P20_OFF'   // 8折 = 20% off
+  | 'P30_OFF'   // 7折 = 30% off
+  | 'P50_OFF'   // 5折 = 50% off
 
-/** 一次结算只允许一个折扣来源（PRD 21） */
-export type DiscountSource = 'none' | 'coupon' | 'member_reward' | 'vip_month'
+/** 每种奖励对应的「off 百分比」，是折扣值的唯一来源（前端预览与 SQL 复核共用） */
+export const REWARD_DISCOUNT_PERCENT: Record<RewardType, number> = {
+  P10_OFF: 10,
+  P20_OFF: 20,
+  P30_OFF: 30,
+  P50_OFF: 50,
+}
 
-/** 一轮里各档位的门槛与对应奖励。第 2 轮及以后靠 10 ×(轮次 - 1) + 档位 推到 12 / 15 / 18 / 20（PRD 7） */
+/** 一次结算只允许一个折扣来源（会员奖励不再有 VIP 月卡这条来源） */
+export type DiscountSource = 'none' | 'coupon' | 'member_reward'
+
+/** 一轮里各档位的门槛与对应奖励。第 2 轮及以后靠 10 ×(轮次 - 1) + 档位 推到 13 / 15 / 17 / 20 */
 export const CYCLE_REWARD_NODES: readonly { node: number; rewardTypes: readonly RewardType[] }[] = [
-  { node: 2,  rewardTypes: ['TWO_POUND'] },
-  { node: 5,  rewardTypes: ['FIVE_POUND'] },
-  { node: 8,  rewardTypes: ['PERSONAL_15_OFF', 'FRIEND_10_OFF'] },
-  { node: 10, rewardTypes: ['VIP_MONTH'] },
+  { node: 3,  rewardTypes: ['P10_OFF'] },
+  { node: 5,  rewardTypes: ['P20_OFF'] },
+  { node: 7,  rewardTypes: ['P30_OFF'] },
+  { node: 10, rewardTypes: ['P50_OFF'] },
 ]
 
-/** 可以在结算台作为折扣使用的奖励类型（VIP Month 是权益，不是折扣来源） */
+/** 可以在结算台作为折扣使用的奖励类型（现在全部奖励都是折扣，四档都在内） */
 export const USABLE_REWARD_TYPES: readonly RewardType[] = [
-  'TWO_POUND', 'FIVE_POUND', 'PERSONAL_15_OFF', 'FRIEND_10_OFF',
+  'P10_OFF', 'P20_OFF', 'P30_OFF', 'P50_OFF',
 ]
 
 export interface MemberRewardRow {
@@ -60,15 +60,7 @@ export interface MemberRewardRow {
   reward_type:    RewardType
   cycle_index:    number
   unlocked_at:    string
-  coupon_id:      string | null
   used_at:        string | null
-}
-
-export interface VipBenefitRow {
-  benefit_id:   string
-  reward_id:    string
-  activated_on: string | null   // 伦敦当地 YYYY-MM-DD
-  expires_on:   string | null
 }
 
 // ── 身份 ────────────────────────────────────────────────────────────────────
@@ -87,7 +79,7 @@ export function isValidMemberEmail(email: string): boolean {
   return dot > 0 && dot < domain.length - 1 && !/\s/.test(email)
 }
 
-/** 客户端展示用的脱敏邮箱：z***@gmail.com（PRD 4.3 前后端都不提供改邮箱） */
+/** 客户端展示用的脱敏邮箱：z***@gmail.com（前后端都不提供改邮箱） */
 export function maskEmail(email: string): string {
   const at = email.indexOf('@')
   if (at <= 0) return '***'
@@ -108,42 +100,6 @@ export function addDays(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** 激活当天算起 30 天含首尾，所以到期日 = 激活日 + 29（PRD 11.2） */
-export function vipExpiresOn(activatedOn: string): string {
-  return addDays(activatedOn, VIP_MONTH_OFFSET_DAYS)
-}
-
-/** 某张 VIP Month 在指定伦敦日期是否生效。激活前不算，到期日当天仍有效 */
-export function isVipBenefitActiveOn(benefit: VipBenefitRow, londonDate: string): boolean {
-  if (!benefit.activated_on || !benefit.expires_on) return false
-  return londonDate >= benefit.activated_on && londonDate <= benefit.expires_on
-}
-
-/** 会员此刻有没有生效中的 VIP Month */
-export function isVipActive(benefits: VipBenefitRow[], londonDate: string): boolean {
-  return benefits.some(b => isVipBenefitActiveOn(b, londonDate))
-}
-
-/**
- * VIP 月卡这类奖励**自身**的状态，由权益日期派生（不存状态字段）：
- *   ready  = 已解锁、还没激活
- *   active = 生效中（到期日当天仍算生效）
- *   ended  = 已经过期
- * 传进来的不是 VIP 月卡（没有权益行）时返回 null，交给调用方按普通奖励处理。
- * 日期都是伦敦当地 YYYY-MM-DD，字符串比较即可（同 isVipBenefitActiveOn 的口径）。
- */
-export type VipRewardState = 'ready' | 'active' | 'ended'
-
-export function vipRewardState(
-  benefit: VipBenefitRow | null | undefined,
-  londonToday: string,
-): VipRewardState | null {
-  if (!benefit) return null
-  if (!benefit.activated_on) return 'ready'
-  if (benefit.expires_on && benefit.expires_on < londonToday) return 'ended'
-  return 'active'
-}
-
 // ── Visit 口径（与 member_visit_days 视图同口径）────────────────────────────
 
 export interface VisitSessionRow {
@@ -152,7 +108,7 @@ export interface VisitSessionRow {
   started_at:      string
   is_settled:      boolean
   reward_eligible: boolean | null
-  /** 下面两个只有会员页要用来区分「这次是不是走了 VIP 折扣」，Visit 口径本身不需要 */
+  /** 下面两个只有会员页要用来展示「这一单走了什么折扣」，Visit 口径本身不需要 */
   discount_amount_gbp?: number | null
   coupon_code_snapshot?: string | null
 }
@@ -178,14 +134,14 @@ export function buildVisitDays(sessions: VisitSessionRow[]): VisitDay[] {
   return [...byDate.values()].sort((a, b) => a.visit_date.localeCompare(b.visit_date))
 }
 
-/** Lifetime Visits：真实到店次数，VIP 期间照常累计（PRD 6.1） */
+/** Lifetime Visits：真实到店次数（每一访日算一次） */
 export function countLifetimeVisits(visits: VisitDay[]): number {
   return visits.length
 }
 
 /**
  * Reward Progress：只认计入进度的访日。
- * 业主 2026-09-16 口径：VIP 期间进度照常累积，所以 false 只来自后台补挂的已结算单，
+ * false 只来自后台把已结算的散客单补挂到会员名下（link_timer_session_to_member），
  * 那一单进 Lifetime、不进 Progress。
  */
 export function countRewardProgress(visits: VisitDay[]): number {
@@ -230,7 +186,7 @@ export interface NextReward {
   rewardTypes: readonly RewardType[]
 }
 
-/** 还差几次到下一个奖励（PRD 7.1 的 "2 more visits to your next reward"） */
+/** 还差几次到下一个奖励 */
 export function nextReward(progress: number): NextReward | null {
   const cycle = Math.floor(progress / REWARD_CYCLE_SIZE) + 1
   for (const { node, rewardTypes } of CYCLE_REWARD_NODES) {
@@ -242,7 +198,7 @@ export function nextReward(progress: number): NextReward | null {
   return null
 }
 
-/** 十格进度条里当前点亮几格。内部总进度不清零，顾客端按 10 循环显示（PRD 7） */
+/** 十格进度条里当前点亮几格。内部总进度不清零，顾客端按 10 循环显示 */
 export function cycleProgress(progress: number): number {
   if (progress <= 0) return 0
   const filled = progress % REWARD_CYCLE_SIZE
@@ -259,7 +215,7 @@ export interface ProgressCell {
   state:        ProgressCellState
 }
 
-/** 进度条的十格数据。顾客端不显示 Cycle 1 / Cycle 2 这类技术概念（PRD 7.1） */
+/** 进度条的十格数据。顾客端不显示 Cycle 1 / Cycle 2 这类技术概念 */
 export function progressBarCells(progress: number): ProgressCell[] {
   const cycle = Math.floor(progress / REWARD_CYCLE_SIZE) + 1
   const filled = cycleProgress(progress)
@@ -278,37 +234,25 @@ export function progressBarCells(progress: number): ProgressCell[] {
 
 // ── 奖励可用性 ──────────────────────────────────────────────────────────────
 
-export type RewardState = 'available' | 'used' | 'paused_by_vip' | 'transferred'
+export type RewardState = 'available' | 'used'
 
 export interface RewardAvailability {
   reward: MemberRewardRow
   state:  RewardState
 }
 
-/**
- * 单个奖励当前能不能用。顺序不能变：
- *   已用 → 已转赠成券（Friend 10% 转赠后不能再用，PRD 10.4）→ VIP 生效中 → 可用
- *
- * paused_by_vip 的含义是「顾客端不能自行使用」：业主 2026-09-16 口径下，VIP 期间进度照常累积、
- * 奖励也不作废，店员可以在结算台手动改用（见 computeMemberDiscount），所以它拦的是顾客自助那条路。
- */
-export function rewardState(reward: MemberRewardRow, vipActive: boolean): RewardState {
-  if (reward.used_at) return 'used'
-  if (reward.reward_type === 'FRIEND_10_OFF' && reward.coupon_id) return 'transferred'
-  if (vipActive) return 'paused_by_vip'
-  return 'available'
+/** 单个奖励当前能不能用：已用 → 可用（不再有转赠、VIP 暂停两类状态） */
+export function rewardState(reward: MemberRewardRow): RewardState {
+  return reward.used_at ? 'used' : 'available'
 }
 
-/** My Rewards 列表：VIP 生效期间其他奖励继续显示、只标成顾客端不可自行使用，不隐藏（PRD 13.1） */
-export function rewardAvailabilityList(
-  rewards: MemberRewardRow[],
-  vipActive: boolean,
-): RewardAvailability[] {
-  return rewards.map(reward => ({ reward, state: rewardState(reward, vipActive) }))
+/** My Rewards 列表：已用的标成不可用，不隐藏 */
+export function rewardAvailabilityList(rewards: MemberRewardRow[]): RewardAvailability[] {
+  return rewards.map(reward => ({ reward, state: rewardState(reward) }))
 }
 
 /**
- * 结算台挑券：同类奖励里挑「最早解锁且未使用」的一张（PRD 9）。
+ * 结算台挑券：同类奖励里挑「最早解锁且未使用」的一张。
  * 排序与 SQL 的 ORDER BY unlocked_at, reward_id 保持一致，否则预览与实际核销会对不上。
  */
 export function pickRewardForUse(
@@ -316,72 +260,21 @@ export function pickRewardForUse(
   rewardType: RewardType,
   excludeSessionId?: string | null,
 ): MemberRewardRow | null {
-  // 不按 VIP 过滤：VIP 期间店员可以手动改用（业主 2026-09-16 口径），
-  // 顾客端的限制由 rewardAvailabilityList 负责。
   const candidates = rewards
     .filter(r => r.reward_type === rewardType)
-    .filter(r => rewardState(r, false) === 'available')
+    .filter(r => rewardState(r) === 'available')
     .filter(r => !excludeSessionId || r.reward_id !== excludeSessionId)
     .sort((a, b) => a.unlocked_at.localeCompare(b.unlocked_at) || a.reward_id.localeCompare(b.reward_id))
   return candidates[0] ?? null
 }
 
-/**
- * 会员当前可选的奖励类型（去重，供结算台下拉用；PRD 21）。
- * 同样不按 VIP 过滤：VIP 期间结算台要能列出奖励供店员手动改用（业主 2026-09-16 口径）。
- */
+/** 会员当前可选的奖励类型（去重，供结算台下拉用） */
 export function usableRewardTypes(rewards: MemberRewardRow[]): RewardType[] {
   const types = rewards
     .filter(r => USABLE_REWARD_TYPES.includes(r.reward_type))
-    .filter(r => rewardState(r, false) === 'available')
+    .filter(r => rewardState(r) === 'available')
     .map(r => r.reward_type)
   return [...new Set(types)]
-}
-
-// ── VIP Month ───────────────────────────────────────────────────────────────
-
-export interface VipMonthSummary {
-  active:                VipBenefitRow | null
-  readyToActivate:       number   // 已解锁、尚未激活的 VIP Month 数量（后台要显示）
-  activated:             number
-}
-
-export function vipMonthSummary(
-  rewards: MemberRewardRow[],
-  benefits: VipBenefitRow[],
-  londonDate: string,
-): VipMonthSummary {
-  const vipRewards = rewards.filter(r => r.reward_type === 'VIP_MONTH')
-  const benefitByReward = new Map(benefits.map(b => [b.reward_id, b]))
-  let readyToActivate = 0
-  let activated = 0
-  let active: VipBenefitRow | null = null
-
-  for (const reward of vipRewards) {
-    const benefit = benefitByReward.get(reward.reward_id)
-    if (!benefit || !benefit.activated_on) {
-      readyToActivate += 1
-      continue
-    }
-    activated += 1
-    if (!active && isVipBenefitActiveOn(benefit, londonDate)) active = benefit
-  }
-
-  return { active, readyToActivate, activated }
-}
-
-/**
- * 能不能再激活一张 VIP Month。同一时间只能有一张生效，且到期后不会自动续（PRD 11.6）。
- * 多张可累计，未激活的排队等下一次手动激活。
- */
-export function canActivateVip(
-  benefits: VipBenefitRow[],
-  londonDate: string,
-): { ok: true } | { ok: false; error: 'VIP_ALREADY_ACTIVE' } {
-  const activeCount = benefits.filter(b => isVipBenefitActiveOn(b, londonDate)).length
-  return activeCount >= MAX_ACTIVE_VIP_MONTHS
-    ? { ok: false, error: 'VIP_ALREADY_ACTIVE' }
-    : { ok: true }
 }
 
 // ── 折扣计算 ────────────────────────────────────────────────────────────────
@@ -406,13 +299,10 @@ export type MemberDiscountError =
   | 'SESSION_AMOUNT_MISSING'
   | 'DISCOUNT_SOURCE_INVALID'
   | 'COUPON_SOURCE_NOT_HANDLED'
-  | 'VIP_MUST_BE_APPLIED'
-  | 'VIP_NOT_ACTIVE'
   | 'REWARD_TYPE_INVALID'
 
 export interface MemberDiscountContext {
   amountGbp:  number | null | undefined
-  vipActive:  boolean
   rewardType?: RewardType | null
 }
 
@@ -429,14 +319,8 @@ export function computeMemberDiscount(
   }
   const prePence = toPence(ctx.amountGbp)
 
-  // VIP 生效期间默认走 VIP 折扣；只有「不打折」被拒。
-  // 业主 2026-09-16 口径：店员可以在柜台改用券或会员奖励，当次放弃 VIP 折扣，VIP 的 30 天不顺延。
-  if (ctx.vipActive && source === 'none') {
-    return { ok: false, error: 'VIP_MUST_BE_APPLIED' }
-  }
-
   if (source === 'coupon') return { ok: false, error: 'COUPON_SOURCE_NOT_HANDLED' }
-  if (source !== 'none' && source !== 'member_reward' && source !== 'vip_month') {
+  if (source !== 'none' && source !== 'member_reward') {
     return { ok: false, error: 'DISCOUNT_SOURCE_INVALID' }
   }
 
@@ -447,28 +331,15 @@ export function computeMemberDiscount(
 
   if (source === 'none') {
     discountPence = 0
-  } else if (source === 'vip_month') {
-    if (!ctx.vipActive) return { ok: false, error: 'VIP_NOT_ACTIVE' }
-    discountType  = 'percentage_off'
-    discountValue = VIP_DISCOUNT_PERCENT
-    discountPence = percentOffPence(prePence, discountValue)
   } else {
     const type = ctx.rewardType ?? null
     if (!type || !USABLE_REWARD_TYPES.includes(type)) {
       return { ok: false, error: 'REWARD_TYPE_INVALID' }
     }
     rewardType = type
-    if (type === 'TWO_POUND') {
-      discountValue = TWO_POUND_PENCE / 100
-      discountPence = Math.min(TWO_POUND_PENCE, prePence)
-    } else if (type === 'FIVE_POUND') {
-      discountValue = FIVE_POUND_PENCE / 100
-      discountPence = Math.min(FIVE_POUND_PENCE, prePence)
-    } else {
-      discountType  = 'percentage_off'
-      discountValue = type === 'PERSONAL_15_OFF' ? PERSONAL_DISCOUNT_PERCENT : FRIEND_DISCOUNT_PERCENT
-      discountPence = percentOffPence(prePence, discountValue)
-    }
+    discountType = 'percentage_off'
+    discountValue = REWARD_DISCOUNT_PERCENT[type]
+    discountPence = percentOffPence(prePence, discountValue)
   }
 
   const finalPence = prePence - discountPence
@@ -481,9 +352,7 @@ export function computeMemberDiscount(
       discountValue,
       description: source === 'none'
         ? '不使用会员优惠'
-        : source === 'vip_month'
-          ? `VIP Month ${VIP_DISCOUNT_PERCENT}% OFF`
-          : describeDiscount(discountType, discountValue),
+        : describeDiscount(discountType, discountValue),
       preDiscountGbp:      fromPence(prePence),
       discountGbp:         fromPence(discountPence),
       finalGbp:            fromPence(finalPence),

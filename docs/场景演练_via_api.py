@@ -4,8 +4,8 @@
 #
 # 顾客侧走本地 dev server 的真实接口：/api/self-timer/start、/api/member/*
 # 店员侧走后台页面调用的同一个数据库函数：settle_timer_session、unsettle_timer_session、
-#        link_timer_session_to_member、activate_member_vip
-# 时间等不起的场景（同一天两次、跨夜、VIP 到期）直接造数据，因为时钟拨不动。
+#        link_timer_session_to_member
+# 时间等不起的场景（同一天两次、跨夜）直接造数据，因为时钟拨不动。
 #
 # 只动 walk.*@tangdouren.test 这几个演练身份，跑完清干净（KEEP=1 保留现场）。
 # 前置：dev server 起在 3002（用 BASE 环境变量可改）。
@@ -176,10 +176,9 @@ def member_id_of(email):
     return (rows or [{}])[0].get("member_id")
 
 
-# ── 清理（引用是个环：权益 → 奖励 → 券 → 订单 → 会员，必须按序解）──────────
+# ── 清理（引用是个环：奖励 → 券 → 订单 → 会员，必须按序解）──────────────────
 def wipe_all(quiet=False):
-    """清掉演练留下的一切。引用是个环，只能按这个顺序解：
-       奖励 → 权益 → 券的核销字段（从券这侧解）→ 单 → 会员 → 券。"""
+    """清掉演练留下的一切。会员奖励不再挂券，环只有：奖励 → 订单 → 会员。"""
     ids = [i for i in (member_id_of(e) for e in WALK_EMAILS) if i]
     errs = []
 
@@ -198,17 +197,14 @@ def wipe_all(quiet=False):
                    f"select=session_id&or=(session_id.like.WALK-*,customer_name.like.{TAG}*)")
     sids = [r["session_id"] for r in (rows or [])]
 
-    # 演练的券：会员奖励挂着的，加上被演练单核销掉的
-    st, rw = sel("member_rewards", "select=coupon_id,coupon:coupon_id&coupon_id=not.is.null"
-                 + (f"&member_id=in.({','.join(ids)})" if ids else "&member_id=is.null"))
-    own = [r["coupon_id"] for r in (rw or [])]
+    # 演练的券：被演练单核销掉的（兜底，正常演练不产生券）
+    own = []
     if sids:
         st, cs = sel("coupons", "select=coupon_id&redeemed_session_id=in.(" + ",".join(sids) + ")")
-        own += [c["coupon_id"] for c in (cs or [])]
+        own = [c["coupon_id"] for c in (cs or [])]
     own = sorted(set(own))
 
     for mid in ids:
-        w("member_benefits", f"member_id=eq.{mid}", f"清权益 {mid[:8]}")
         w("member_rewards", f"member_id=eq.{mid}", f"清奖励 {mid[:8]}")
     if own:
         n("coupons", "coupon_id=in.(" + ",".join(own) + ")",
@@ -218,7 +214,7 @@ def wipe_all(quiet=False):
     for mid in ids:
         w("members", f"member_id=eq.{mid}", f"清会员 {mid[:8]}")
     if own:
-        w("coupons", "coupon_id=in.(" + ",".join(own) + ")", "清演练内部券")
+        w("coupons", "coupon_id=in.(" + ",".join(own) + ")", "清演练券")
 
     if errs and not quiet:
         print("清理时报错：")
@@ -348,171 +344,94 @@ st, rows = sel("member_visit_days", f"select=visit_date&member_id=eq.{DONG_ID}&o
 check("B5 按伦敦日期归档，不是按 UTC", sorted([day(62), day(60)]),
       [r["visit_date"] for r in (rows or [])])
 
-# ═══ C. 奖励解锁与核销 ═════════════════════════════════════════════════════
+# ═══ C. 奖励解锁阶梯：3 / 5 / 7 / 10 次 ═════════════════════════════════════
 sid_20 = mk(MEI_ID, 20, settled=False)
 check("C1 第 2 次到店结算成功", 200, settle(sid_20, "none", 0)[0])
 add_day(day(20))
 assert_book("C1", "C1 小梅第 2 次到店")
-check("C1 解锁 £2 抵用券（第一轮）", sorted([(1, "TWO_POUND")]), reward_set(MEI_ID))
+check("C1 还没到第 3 次，一张奖励都没有", [], reward_set(MEI_ID))
 
 sid_19 = mk(MEI_ID, 19, settled=False)
-st, out = settle(sid_19, "member_reward", 200, member=MEI_ID, reward="TWO_POUND")
-check("C2 顾客用 £2 抵用券结账", 200, st)
-check("C2 金额 13.99 → 11.99", "11.99", sess(sid_19).get("actual_amount_gbp"))
-used = [r for r in rewards_of(MEI_ID) if r["used_at"]]
-check("C2 这张券标记为已用", 1, len(used))
-st, cr = sel("member_rewards", f"select=coupon_id&member_id=eq.{MEI_ID}"
-                                 f"&reward_type=eq.TWO_POUND&used_at=not.is.null")
-COUPON_1 = (cr or [{}])[0].get("coupon_id")
-st, cp = sel("coupons", f"select=redeemed_session_id,code&coupon_id=eq.{COUPON_1}") if COUPON_1 else (0, None)
-check("C2 内部券同步核销到这张单", sid_19,
-      (cp[0].get("redeemed_session_id") if isinstance(cp, list) and cp else None))
-if not COUPON_1:
-    note("C2 没拿到这张奖励对应的内部券", f"查询返回 {cp}")
+check("C2 第 3 次到店结算成功", 200, settle(sid_19, "none", 0)[0])
 add_day(day(19))
+assert_book("C2", "C2 小梅第 3 次到店")
+check("C2 第 3 次解锁 9 折", [(1, "P10_OFF")], reward_set(MEI_ID))
 
 sid_18 = mk(MEI_ID, 18, settled=False)
-st, out = settle(sid_18, "member_reward", 200, member=MEI_ID, reward="TWO_POUND")
-check("C3 手里已经没有可用的 £2，再想用一张会被拦", True, st >= 400)
-note("C3 拦下来的原话", f"HTTP {st} {err((st, out))}")
-
-st, out = rpc("unsettle_timer_session", p_session_id=sid_19)
-check("C4 撤销结算成功", 200, st)
-st, rws = sel("member_rewards", f"select=used_at&member_id=eq.{MEI_ID}&reward_type=eq.TWO_POUND")
-check("C4 撤销后 £2 退回未使用", True, all(r["used_at"] is None for r in (rws or [])))
-st, cp2 = sel("coupons", f"select=redeemed_at&coupon_id=eq.{COUPON_1}")
-check("C4 内部券也回到未核销", None, (cp2 or [{}])[0].get("redeemed_at"))
-prog.discard(day(19)); life.discard(day(19))
-assert_book("C4", "C4 撤销后到店次数回退")
-st, out = rpc("unsettle_timer_session", p_session_id=sid_19)
-check("C5 已经撤销过的单再撤一次会被拦", True, st >= 400)
-note("C5 拦下来的原话", f"HTTP {st} {err((st, out))}")
-
-check("C6 重结 C3 那张单（这次不用优惠）", 200, settle(sid_18, "none", 0)[0])
+st, out = settle(sid_18, "member_reward", 140, member=MEI_ID, reward="P10_OFF")
+check("C3 第 4 次到店用掉 9 折", 200, st)
+check("C3 金额 13.99 → 12.59", "12.59", sess(sid_18).get("actual_amount_gbp"))
+used = [r for r in rewards_of(MEI_ID) if r["used_at"]]
+check("C3 这张 9 折标记为已用", 1, len(used))
 add_day(day(18))
+assert_book("C3", "C3 小梅第 4 次到店")
+
 sid_17 = mk(MEI_ID, 17, settled=False)
-check("C6 第 4 次到店结算成功", 200, settle(sid_17, "none", 0)[0]); add_day(day(17))
+st, out = settle(sid_17, "member_reward", 140, member=MEI_ID, reward="P10_OFF")
+check("C4 手里已经没有可用的 9 折，再想用一张会被拦", True, st >= 400)
+note("C4 拦下来的原话", f"HTTP {st} {err((st, out))}")
+st, out = settle(sid_17, "none", 0)
+check("C4 这单改成不用优惠后正常结算（第 5 次）", 200, st)
+add_day(day(17))
+assert_book("C4", "C4 小梅第 5 次到店")
+check("C4 第 5 次解锁 8 折", sorted([(1, "P10_OFF"), (1, "P20_OFF")]), reward_set(MEI_ID))
+
 sid_16 = mk(MEI_ID, 16, settled=False)
-check("C6 第 5 次到店结算成功", 200, settle(sid_16, "none", 0)[0]); add_day(day(16))
-assert_book("C6", "C6 小梅第 5 次到店")
-check("C6 解锁 £5 抵用券", sorted([(1, "FIVE_POUND"), (1, "TWO_POUND")]), reward_set(MEI_ID))
+settle(sid_16, "none", 0); add_day(day(16))
+sid_15 = mk(MEI_ID, 15, settled=False)
+check("C5 第 7 次到店结算成功", 200, settle(sid_15, "none", 0)[0]); add_day(day(15))
+assert_book("C5", "C5 小梅第 7 次到店")
+check("C5 第 7 次解锁 7 折",
+      sorted([(1, "P10_OFF"), (1, "P20_OFF"), (1, "P30_OFF")]), reward_set(MEI_ID))
 
-for n in (15, 14, 13):
+sid_14 = mk(MEI_ID, 14, settled=False)
+settle(sid_14, "none", 0); add_day(day(14))
+sid_13 = mk(MEI_ID, 13, settled=False)
+settle(sid_13, "none", 0); add_day(day(13))
+sid_12 = mk(MEI_ID, 12, settled=False)
+check("C6 第 10 次到店结算成功", 200, settle(sid_12, "none", 0)[0]); add_day(day(12))
+assert_book("C6", "C6 小梅第 10 次到店")
+check("C6 第 10 次解锁 5 折",
+      sorted([(1, "P10_OFF"), (1, "P20_OFF"), (1, "P30_OFF"), (1, "P50_OFF")]), reward_set(MEI_ID))
+
+sid_qiang = mk(QIANG_ID, 25, settled=False)
+st, out = settle(sid_qiang, "member_reward", 280, member=MEI_ID, reward="P20_OFF")
+check("C7 会员折扣不能用在朋友那桌的单上", "MEMBER_SESSION_MISMATCH", err((st, out)))
+
+for n in (11, 10, 9):
     sid = mk(MEI_ID, n, settled=False)
     settle(sid, "none", 0); add_day(day(n))
-assert_book("C7", "C7 小梅第 8 次到店")
-check("C7 第 8 次解锁本人 85 折 + 朋友 9 折",
-      sorted([(1, "FIVE_POUND"), (1, "FRIEND_10_OFF"), (1, "PERSONAL_15_OFF"), (1, "TWO_POUND")]),
+assert_book("C8", "C8 小梅第 13 次到店")
+check("C8 每 10 次一轮：第 13 次又解锁一张 9 折",
+      sorted([(1, "P10_OFF"), (1, "P20_OFF"), (1, "P30_OFF"), (1, "P50_OFF"), (2, "P10_OFF")]),
       reward_set(MEI_ID))
 
-sid_friend = mk(QIANG_ID, 25, settled=False)
-st, out = settle(sid_friend, "member_reward", 140, member=MEI_ID, reward="FRIEND_10_OFF")
-check("C8 朋友 9 折能用在朋友那桌的单上", 200, st)
-check("C8 金额 13.99 → 12.59", "12.59", sess(sid_friend).get("actual_amount_gbp"))
-
-sid_wrong = mk(QIANG_ID, 24, settled=False)
-st, out = settle(sid_wrong, "member_reward", 210, member=MEI_ID, reward="PERSONAL_15_OFF")
-check("C9 本人的 85 折不能用在别人的单上", "MEMBER_SESSION_MISMATCH", err((st, out)))
-
-for n in (12, 11):
-    sid = mk(MEI_ID, n, settled=False)
-    settle(sid, "none", 0); add_day(day(n))
-assert_book("C10", "C10 小梅第 10 次到店")
-check("C10 第 10 次解锁 VIP 月卡", sorted([(1, "FIVE_POUND"), (1, "FRIEND_10_OFF"),
-      (1, "PERSONAL_15_OFF"), (1, "TWO_POUND"), (1, "VIP_MONTH")]), reward_set(MEI_ID))
-st, ben = sel("member_benefits", f"select=benefit_id,reward_id,activated_on&member_id=eq.{MEI_ID}")
-check("C10 月卡解锁后是「未激活」，不会自己开始算", None, (ben or [{}])[0].get("activated_on"))
-VIP1_REWARD = (ben or [{}])[0].get("reward_id")
-VIP1_BENEFIT = (ben or [{}])[0].get("benefit_id")
-
-# ═══ D. VIP 月卡生效期间，柜台怎么收钱 ═════════════════════════════════════
-st, out = rpc("activate_member_vip", p_reward_id=VIP1_REWARD, p_activated_by="演练店员")
-check("D1 激活月卡成功", 200, st)
-st, b = sel("member_benefits", f"select=activated_on,expires_on&benefit_id=eq.{VIP1_BENEFIT}")
-check("D1 30 天含首尾：到期日 = 激活日 + 29 天", str(D + timedelta(days=29)), (b or [{}])[0].get("expires_on"))
-noon = lambda d: f"{d.isoformat()}T12:00:00+00:00"
-check("D1 激活当天就算生效", True, rpc("member_vip_active", p_member_id=MEI_ID, p_at=noon(D))[1])
-check("D1 到期日当天仍然生效", True, rpc("member_vip_active", p_member_id=MEI_ID, p_at=noon(D + timedelta(days=29)))[1])
-check("D1 到期次日失效", False, rpc("member_vip_active", p_member_id=MEI_ID, p_at=noon(D + timedelta(days=30)))[1])
-
-sid_10 = mk(MEI_ID, 10, settled=False)
-st, out = settle(sid_10, "vip_month", 210, member=MEI_ID)
-check("D2 VIP 期间来店结算成功", 200, st)
-check("D2 自动按 85 折收：13.99 → 11.89", "11.89", sess(sid_10).get("actual_amount_gbp"))
-check("D2 VIP 期间消费照常计入奖励进度", True, sess(sid_10).get("reward_eligible"))
-add_day(day(10)); assert_book("D2", "D2 小梅第 11 次到店")
-
-sid_9 = mk(MEI_ID, 9, settled=False)
-st, out = settle(sid_9, "member_reward", 200, member=MEI_ID, reward="TWO_POUND")
-check("D3 VIP 期间店员改用 £2 券（当次不要 VIP 折扣）", 200, st)
-check("D3 金额变成 11.99", "11.99", sess(sid_9).get("actual_amount_gbp"))
-add_day(day(9))
-check("D3 第 12 次到店解锁第二轮的 £2", sorted([(2, "TWO_POUND"), (1, "FIVE_POUND"),
-      (1, "FRIEND_10_OFF"), (1, "PERSONAL_15_OFF"), (1, "TWO_POUND"), (1, "VIP_MONTH")]),
-      reward_set(MEI_ID))
-
-sid_8 = mk(MEI_ID, 8, settled=False)
-st, out = settle(sid_8, "none", 0)
-check("D4 VIP 期间按原价结账会被拦（会员不该多付钱）", "VIP_MUST_BE_APPLIED", err((st, out)))
-check("D4 改回 VIP 折扣后正常结算", 200, settle(sid_8, "vip_month", 210, member=MEI_ID)[0])
-add_day(day(8)); assert_book("D4", "D4 小梅第 13 次到店")
-
-# 补挂：顾客开始计时时忘了输邮箱
+# ═══ D. 补挂：顾客开始计时时忘了输邮箱 ═════════════════════════════════════
 sid_forget = mk(None, 7, settled=False)
 st, out = rpc("link_timer_session_to_member", p_session_id=sid_forget, p_member_id=MEI_ID)
-check("D5 未结算的散客单可以当场补挂到会员", 200, st)
-check("D5 挂上后还没结算时，进度资格留空等结算", None, sess(sid_forget).get("reward_eligible"))
-st, out = settle(sid_forget, "vip_month", 210, member=MEI_ID)
-check("D5 补挂后结算成功（此时 VIP 生效，按 85 折收）", 200, st)
-add_day(day(7)); assert_book("D5", "D5 小梅第 14 次到店")
+check("D1 未结算的散客单可以当场补挂到会员", 200, st)
+check("D1 挂上后还没结算时，进度资格留空等结算", None, sess(sid_forget).get("reward_eligible"))
+st, out = settle(sid_forget, "none", 0)
+check("D1 补挂后结算成功", 200, st)
+add_day(day(7)); assert_book("D1", "D1 小梅第 14 次到店")
 
 sid_past = mk(None, 30, settled=True)
 st, out = rpc("link_timer_session_to_member", p_session_id=sid_past, p_member_id=MEI_ID)
-check("D6 已经结算的散客单事后也能补挂", 200, st)
-check("D6 补挂只加累计到店，不加奖励进度", False, sess(sid_past).get("reward_eligible"))
-check("D6 补挂不动已收的金额", "13.99", sess(sid_past).get("actual_amount_gbp"))
-add_day(day(30), "life"); assert_book("D6", "D6 补挂后累计 15 次 / 进度 14 次")
+check("D2 已经结算的散客单事后也能补挂", 200, st)
+check("D2 补挂只加累计到店，不加奖励进度", False, sess(sid_past).get("reward_eligible"))
+check("D2 补挂不动已收的金额", "13.99", sess(sid_past).get("actual_amount_gbp"))
+add_day(day(30), "life"); assert_book("D2", "D2 补挂后累计 15 次 / 进度 14 次")
 st, out = rpc("link_timer_session_to_member", p_session_id=sid_past, p_member_id=QIANG_ID)
-check("D6 已经归属小梅的单不能再改挂给阿强", "SESSION_ALREADY_LINKED", err((st, out)))
-
-# VIP 还生效中，这些单同样按 85 折（也顺便压一压「VIP 期间连续来店」这条路径）
-for n in (6, 5, 4, 3, 2, 1):
-    sid = mk(MEI_ID, n, settled=False)
-    st, out = settle(sid, "vip_month", 210, member=MEI_ID)
-    assert st == 200, (n, st, out)
-    add_day(day(n))
-assert_book("D7", "D7 小梅第 20 次到店")
-check("D7 满 20 次解锁第二轮 VIP 月卡",
-      sorted([(2, "TWO_POUND"), (2, "FIVE_POUND"), (2, "FRIEND_10_OFF"), (2, "PERSONAL_15_OFF"),
-              (2, "VIP_MONTH"), (1, "FIVE_POUND"), (1, "FRIEND_10_OFF"), (1, "PERSONAL_15_OFF"),
-              (1, "TWO_POUND"), (1, "VIP_MONTH")]), reward_set(MEI_ID))
-st, ben = sel("member_benefits", f"select=benefit_id,reward_id&member_id=eq.{MEI_ID}"
-                                  f"&activated_on=is.null")
-VIP2_REWARD = (ben or [{}])[0].get("reward_id")
-st, out = rpc("activate_member_vip", p_reward_id=VIP2_REWARD, p_activated_by="演练店员")
-check("D8 手上还有一张生效中的月卡时，第二张激活会被拦", "VIP_ALREADY_ACTIVE", err((st, out)))
-
-req("PATCH", f"/rest/v1/member_benefits?benefit_id=eq.{VIP1_BENEFIT}",
-    {"activated_on": str(D - timedelta(days=40)), "expires_on": str(D - timedelta(days=11)),
-     "activated_at": NOW.isoformat(), "activated_by": "演练店员"})
-check("D9 第一张放到 40 天前后，月卡不再生效",
-      False, rpc("member_vip_active", p_member_id=MEI_ID, p_at=noon(D))[1])
-st, out = rpc("activate_member_vip", p_reward_id=VIP2_REWARD, p_activated_by="演练店员")
-check("D9 旧的过期后，第二张可以激活", 200, st)
+check("D2 已经归属小梅的单不能再改挂给阿强", "SESSION_ALREADY_LINKED", err((st, out)))
 
 # ═══ E. 顾客自己的手机上看到什么（走真实接口）══════════════════════════════
 st, raw = api("/api/member/dashboard", {"email": MEI})
 check("E1 会员页能打开", 200, st)
 d = (raw or {}).get("dashboard") or {}
-check("E1 会员页显示的累计到店 = 21", 21, d.get("lifetime_visits"))
-check("E1 会员页显示的奖励进度 = 20", 20, d.get("reward_progress"))
-check("E1 会员页显示 10 张奖励", 10, len(d.get("rewards") or []))
-check("E1 会员页显示月卡生效至第二张的到期日", str(D + timedelta(days=29)),
-      (d.get("vip") or {}).get("active_expires_on"))
+check("E1 会员页显示的累计到店 = 15", 15, d.get("lifetime_visits"))
+check("E1 会员页显示的奖励进度 = 14", 14, d.get("reward_progress"))
+check("E1 会员页显示 5 张奖励", 5, len(d.get("rewards") or []))
 check("E1 最近到店按日期倒序、最新一条是今天", str(D), (d.get("visit_history") or [{}])[0].get("visit_date"))
-vip_rows = [r for r in (d.get("rewards") or []) if r["reward"]["reward_type"] == "VIP_MONTH"]
-check("E1 两张月卡都带回权益日期，页面才能显示「生效中 / 已结束」",
-      True, all(r.get("benefit") and r["benefit"].get("expires_on") for r in vip_rows))
 st, raw = api("/api/member/dashboard", {"email": MEI, "visitLimit": 100})
 d = (raw or {}).get("dashboard") or {}
 st, settled_rows = sel("timer_sessions",

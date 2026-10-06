@@ -1,6 +1,6 @@
 'use client'
 
-// 会员进度条（PRD 7.1）：十格循环显示，2 / 5 / 8 / 10 是奖励节点。
+// 会员进度条：十格循环显示，3 / 5 / 7 / 10 是奖励节点。
 // 顾客端不出现「第几轮」这类概念，只显示本轮的第几格。
 // 奖励说明：每个奖励节点都带 title（电脑上鼠标悬停可见）；
 // expandable = true 时再支持「点一下展开」（顾客端多是手机，没有悬停这回事）。
@@ -19,18 +19,16 @@ const copy = {
     roundDone:     '本轮已完成，下一格自动开始新一轮',
     atNode:        (n: number) => `第 ${n} 次`,
     rewards: {
-      TWO_POUND:       '£2',
-      FIVE_POUND:      '£5',
-      PERSONAL_15_OFF: '🎁',
-      FRIEND_10_OFF:   '🎁',
-      VIP_MONTH:       '月卡',
+      P10_OFF: '9折',
+      P20_OFF: '8折',
+      P30_OFF: '7折',
+      P50_OFF: '5折',
     } as Record<RewardType, string>,
     hints: {
-      TWO_POUND:       '£2 抵用券：下次到店结算时可抵扣 £2',
-      FIVE_POUND:      '£5 抵用券：下次到店结算时可抵扣 £5',
-      PERSONAL_15_OFF: '本人 85 折：下次消费可以自己用',
-      FRIEND_10_OFF:   '朋友 9 折：可以给朋友用',
-      VIP_MONTH:       'VIP 月卡：激活后 30 天内每次计时自动享受 85 折',
+      P10_OFF: '9折：下次到店结算打 9 折',
+      P20_OFF: '8折：下次到店结算打 8 折',
+      P30_OFF: '7折：下次到店结算打 7 折',
+      P50_OFF: '5折：下次到店结算打 5 折',
     } as Record<RewardType, string>,
   },
   en: {
@@ -41,18 +39,16 @@ const copy = {
     roundDone:     'This round is complete, the next visit starts a new round',
     atNode:        (n: number) => `Visit ${n}`,
     rewards: {
-      TWO_POUND:       '£2',
-      FIVE_POUND:      '£5',
-      PERSONAL_15_OFF: '🎁',
-      FRIEND_10_OFF:   '🎁',
-      VIP_MONTH:       'VIP',
+      P10_OFF: '10% off',
+      P20_OFF: '20% off',
+      P30_OFF: '30% off',
+      P50_OFF: '50% off',
     } as Record<RewardType, string>,
     hints: {
-      TWO_POUND:       '£2 voucher: £2 off at your next settlement',
-      FIVE_POUND:      '£5 voucher: £5 off at your next settlement',
-      PERSONAL_15_OFF: '15% off for you: use it on your next visit',
-      FRIEND_10_OFF:   '10% off for a friend: pass it on',
-      VIP_MONTH:       'VIP Month: 15% off every timer session for 30 days after you activate it',
+      P10_OFF: '10% off: use it on your next settlement',
+      P20_OFF: '20% off: use it on your next settlement',
+      P30_OFF: '30% off: use it on your next settlement',
+      P50_OFF: '50% off: use it on your next settlement',
     } as Record<RewardType, string>,
   },
 } as const
@@ -71,7 +67,7 @@ export default function MemberProgressBar({ cells, cycleProgress, nextReward, li
   const c = copy[lang]
   const [openNode, setOpenNode] = useState<number | null>(null)
 
-  /** 一个节点上可能挂着两种奖励（第 8 次是本人 85 折 + 朋友 9 折），说明合并显示 */
+  /** 一个节点上挂着的奖励类型（现在每个节点一种），说明合并显示 */
   const nodeHint = (types: readonly RewardType[]) =>
     types.map(rt => c.hints[rt]).filter((v, i, a) => a.indexOf(v) === i).join(' · ')
 

@@ -69,11 +69,11 @@ ALTER TABLE timer_sessions
   ADD COLUMN IF NOT EXISTS member_id uuid REFERENCES members(member_id) ON DELETE SET NULL;
 
 -- 本次消费是否计入 Reward Progress，在结算时固化，不在查询时按日期重推：
---   true  = 有会员归属，且结算那一刻该会员没有生效中的 VIP Month
---   false = 不计入（结算时 VIP 正在生效）
+--   true  = 有会员归属，且是会员本人正常结算的单
+--   false = 不计入（后台把已结算的散客单补挂到会员名下，只计 Lifetime）
 --   NULL  = 尚未判定（未结算的订单、以及本迁移之前的历史订单）
--- 之所以固化而不是现算：VIP Month 从激活那一刻起暂停进度，事后按日期重推会把
--- 激活当天早些时候已经完成的消费一起误伤掉。
+-- 之所以固化而不是现算：后台补挂的历史订单事后按日期重推，会把
+-- 那些散客消费一起误计进 Reward Progress。
 ALTER TABLE timer_sessions
   ADD COLUMN IF NOT EXISTS reward_eligible boolean;
 

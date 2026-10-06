@@ -3,19 +3,13 @@ import test from 'node:test'
 import { calcBill } from '../lib/timer/pricing.ts'
 import {
   CYCLE_REWARD_NODES,
-  FIVE_POUND_PENCE,
-  PERSONAL_DISCOUNT_PERCENT,
   REWARD_CYCLE_SIZE,
-  TWO_POUND_PENCE,
-  VIP_MONTH_DAYS,
+  REWARD_DISCOUNT_PERCENT,
   buildVisitDays,
-  canActivateVip,
   computeMemberDiscount,
   countLifetimeVisits,
   countRewardProgress,
   cycleProgress,
-  isVipActive,
-  isVipBenefitActiveOn,
   isValidMemberEmail,
   londonDateOf,
   maskEmail,
@@ -29,13 +23,9 @@ import {
   rewardThreshold,
   unlockedRewardsForProgress,
   usableRewardTypes,
-  vipExpiresOn,
-  vipMonthSummary,
-  vipRewardState,
   type MemberRewardRow,
   type RewardType,
   type VisitSessionRow,
-  type VipBenefitRow,
 } from '../lib/member/member.ts'
 
 // ── 测试辅助 ────────────────────────────────────────────────────────────────
@@ -60,7 +50,6 @@ function reward(type: RewardType, opts: Partial<MemberRewardRow> = {}): MemberRe
     reward_type: type,
     cycle_index: 1,
     unlocked_at: '2026-09-01T10:00:00Z',
-    coupon_id:   type === 'TWO_POUND' || type === 'FIVE_POUND' ? `coupon-${rewardSeq}` : null,
     used_at:     null,
     ...opts,
   }
@@ -148,45 +137,42 @@ test('同一天只要有一条计入进度，这一天就算（补挂不会回�
 
 // ── 轮次与进度 ──────────────────────────────────────────────────────────────
 
-test('档位门槛：第 2 轮落在 12 / 15 / 18 / 20', () => {
-  assert.equal(rewardThreshold(1, 2), 2)
+test('档位门槛：第 2 轮落在 13 / 15 / 17 / 20', () => {
+  assert.equal(rewardThreshold(1, 3), 3)
   assert.equal(rewardThreshold(1, 10), 10)
-  assert.equal(rewardThreshold(2, 2), 12)
+  assert.equal(rewardThreshold(2, 3), 13)
   assert.equal(rewardThreshold(2, 5), 15)
-  assert.equal(rewardThreshold(2, 8), 18)
+  assert.equal(rewardThreshold(2, 7), 17)
   assert.equal(rewardThreshold(2, 10), 20)
-  assert.equal(rewardThreshold(3, 2), 22)
+  assert.equal(rewardThreshold(3, 3), 23)
 })
 
-test('解锁集合随进度增长，第 8 档一次发两张', () => {
+test('解锁集合随进度增长，每个档位解锁一种折扣', () => {
   assert.deepEqual(unlockedRewardsForProgress(0), [])
+  assert.deepEqual(unlockedRewardsForProgress(2), [])
   assert.deepEqual(
-    unlockedRewardsForProgress(2).map(r => [r.cycle_index, r.reward_type]),
-    [[1, 'TWO_POUND']],
+    unlockedRewardsForProgress(3).map(r => [r.cycle_index, r.reward_type]),
+    [[1, 'P10_OFF']],
   )
   assert.deepEqual(
     unlockedRewardsForProgress(7).map(r => r.reward_type),
-    ['TWO_POUND', 'FIVE_POUND'],
-  )
-  assert.deepEqual(
-    unlockedRewardsForProgress(8).map(r => r.reward_type),
-    ['TWO_POUND', 'FIVE_POUND', 'PERSONAL_15_OFF', 'FRIEND_10_OFF'],
+    ['P10_OFF', 'P20_OFF', 'P30_OFF'],
   )
   assert.deepEqual(
     unlockedRewardsForProgress(10).map(r => r.reward_type),
-    ['TWO_POUND', 'FIVE_POUND', 'PERSONAL_15_OFF', 'FRIEND_10_OFF', 'VIP_MONTH'],
+    ['P10_OFF', 'P20_OFF', 'P30_OFF', 'P50_OFF'],
   )
 })
 
-test('第 2 轮的四个节点按 12 / 15 / 18 / 20 解锁', () => {
-  const at12 = unlockedRewardsForProgress(12)
-  assert.deepEqual(at12.slice(-1).map(r => [r.cycle_index, r.reward_type]), [[2, 'TWO_POUND']])
+test('第 2 轮的四个节点按 13 / 15 / 17 / 20 解锁', () => {
+  const at13 = unlockedRewardsForProgress(13)
+  assert.deepEqual(at13.slice(-1).map(r => [r.cycle_index, r.reward_type]), [[2, 'P10_OFF']])
   const at20 = unlockedRewardsForProgress(20)
   assert.deepEqual(
     at20.filter(r => r.cycle_index === 2).map(r => [r.threshold, r.reward_type]),
-    [[12, 'TWO_POUND'], [15, 'FIVE_POUND'], [18, 'PERSONAL_15_OFF'], [18, 'FRIEND_10_OFF'], [20, 'VIP_MONTH']],
+    [[13, 'P10_OFF'], [15, 'P20_OFF'], [17, 'P30_OFF'], [20, 'P50_OFF']],
   )
-  assert.equal(at20.length, 10)
+  assert.equal(at20.length, 8)
 })
 
 test('解锁数量单调不减，且同一档位只出现一次', () => {
@@ -200,11 +186,12 @@ test('解锁数量单调不减，且同一档位只出现一次', () => {
   }
 })
 
-test('下一个奖励与还差几次（PRD 7.1 的例子：6 / 10，还差 2 次）', () => {
-  assert.deepEqual(nextReward(6), { cycle_index: 1, node: 8, threshold: 8, remaining: 2, rewardTypes: ['PERSONAL_15_OFF', 'FRIEND_10_OFF'] })
-  assert.deepEqual(nextReward(0), { cycle_index: 1, node: 2, threshold: 2, remaining: 2, rewardTypes: ['TWO_POUND'] })
-  assert.deepEqual(nextReward(10), { cycle_index: 2, node: 2, threshold: 12, remaining: 2, rewardTypes: ['TWO_POUND'] })
-  assert.deepEqual(nextReward(21), { cycle_index: 3, node: 2, threshold: 22, remaining: 1, rewardTypes: ['TWO_POUND'] })
+test('下一个奖励与还差几次', () => {
+  assert.deepEqual(nextReward(0), { cycle_index: 1, node: 3, threshold: 3, remaining: 3, rewardTypes: ['P10_OFF'] })
+  assert.deepEqual(nextReward(3), { cycle_index: 1, node: 5, threshold: 5, remaining: 2, rewardTypes: ['P20_OFF'] })
+  assert.deepEqual(nextReward(6), { cycle_index: 1, node: 7, threshold: 7, remaining: 1, rewardTypes: ['P30_OFF'] })
+  assert.deepEqual(nextReward(10), { cycle_index: 2, node: 3, threshold: 13, remaining: 3, rewardTypes: ['P10_OFF'] })
+  assert.deepEqual(nextReward(21), { cycle_index: 3, node: 3, threshold: 23, remaining: 2, rewardTypes: ['P10_OFF'] })
 })
 
 test('十格循环显示：内部总进度不清零', () => {
@@ -216,10 +203,10 @@ test('十格循环显示：内部总进度不清零', () => {
   assert.equal(cycleProgress(23), 3)
 })
 
-test('进度条格子：2 / 5 / 8 / 10 是奖励节点', () => {
+test('进度条格子：3 / 5 / 7 / 10 是奖励节点', () => {
   const cells = progressBarCells(6)
   assert.equal(cells.length, REWARD_CYCLE_SIZE)
-  assert.deepEqual(cells.filter(c => c.isRewardNode).map(c => c.index), [2, 5, 8, 10])
+  assert.deepEqual(cells.filter(c => c.isRewardNode).map(c => c.index), [3, 5, 7, 10])
   assert.deepEqual(cells.filter(c => c.state === 'done').map(c => c.index), [1, 2, 3, 4, 5, 6])
   assert.equal(cells[6].state, 'current')
   const roundTwo = progressBarCells(13)
@@ -227,187 +214,118 @@ test('进度条格子：2 / 5 / 8 / 10 是奖励节点', () => {
   assert.deepEqual(roundTwo.filter(c => c.state === 'done').map(c => c.index), [1, 2, 3])
 })
 
-test('奖励节点表就是 PRD 第 7 节那张表', () => {
+test('奖励节点表就是新版 3 / 5 / 7 / 10 四档', () => {
   assert.deepEqual(
     CYCLE_REWARD_NODES.map(n => [n.node, n.rewardTypes]),
-    [[2, ['TWO_POUND']], [5, ['FIVE_POUND']], [8, ['PERSONAL_15_OFF', 'FRIEND_10_OFF']], [10, ['VIP_MONTH']]],
+    [[3, ['P10_OFF']], [5, ['P20_OFF']], [7, ['P30_OFF']], [10, ['P50_OFF']]],
   )
+})
+
+test('折扣百分比表与奖励节点一一对应', () => {
+  assert.deepEqual(REWARD_DISCOUNT_PERCENT, { P10_OFF: 10, P20_OFF: 20, P30_OFF: 30, P50_OFF: 50 })
 })
 
 // ── 奖励可用性 ──────────────────────────────────────────────────────────────
 
-test('奖励状态：已用 > 已转赠 > VIP 生效中（顾客不可自行使用）> 可用', () => {
-  assert.equal(rewardState(reward('TWO_POUND', { used_at: '2026-09-20T10:00:00Z' }), false), 'used')
-  assert.equal(rewardState(reward('FRIEND_10_OFF', { coupon_id: 'coupon-x' }), false), 'transferred')
-  assert.equal(rewardState(reward('PERSONAL_15_OFF'), true), 'paused_by_vip')
-  assert.equal(rewardState(reward('PERSONAL_15_OFF'), false), 'available')
+test('奖励状态只有可用 / 已使用两种', () => {
+  assert.equal(rewardState(reward('P10_OFF', { used_at: '2026-09-20T10:00:00Z' })), 'used')
+  assert.equal(rewardState(reward('P20_OFF')), 'available')
 })
 
-test('VIP 期间其他奖励继续显示，只是标成不可用', () => {
-  const list = rewardAvailabilityList([reward('TWO_POUND'), reward('PERSONAL_15_OFF')], true)
+test('已用的奖励标成不可用，但列表仍保留', () => {
+  const list = rewardAvailabilityList([reward('P10_OFF'), reward('P20_OFF', { used_at: '2026-09-20T10:00:00Z' })])
   assert.equal(list.length, 2)
-  assert.deepEqual(list.map(r => r.state), ['paused_by_vip', 'paused_by_vip'])
+  assert.deepEqual(list.map(r => r.state), ['available', 'used'])
 })
 
 test('同类多张时挑最早解锁的那张，与 SQL 的排序一致', () => {
-  const older = reward('TWO_POUND', { reward_id: 'reward-a', unlocked_at: '2026-09-01T10:00:00Z' })
-  const newer = reward('TWO_POUND', { reward_id: 'reward-b', unlocked_at: '2026-09-05T10:00:00Z' })
-  assert.equal(pickRewardForUse([newer, older], 'TWO_POUND')?.reward_id, 'reward-a')
+  const older = reward('P10_OFF', { reward_id: 'reward-a', unlocked_at: '2026-09-01T10:00:00Z' })
+  const newer = reward('P10_OFF', { reward_id: 'reward-b', unlocked_at: '2026-09-05T10:00:00Z' })
+  assert.equal(pickRewardForUse([newer, older], 'P10_OFF')?.reward_id, 'reward-a')
 })
 
-test('挑券时跳过已用、已转赠的（VIP 期间也能挑，供店员手动改用）', () => {
-  const used = reward('TWO_POUND', { reward_id: 'reward-a', used_at: '2026-09-20T10:00:00Z' })
-  const ok = reward('TWO_POUND', { reward_id: 'reward-b' })
-  assert.equal(pickRewardForUse([used, ok], 'TWO_POUND')?.reward_id, 'reward-b')
-
-  const transferred = reward('FRIEND_10_OFF', { reward_id: 'reward-c', coupon_id: 'coupon-x' })
-  assert.equal(pickRewardForUse([transferred], 'FRIEND_10_OFF'), null)
+test('挑券时跳过已用的', () => {
+  const used = reward('P10_OFF', { reward_id: 'reward-a', used_at: '2026-09-20T10:00:00Z' })
+  const ok = reward('P10_OFF', { reward_id: 'reward-b' })
+  assert.equal(pickRewardForUse([used, ok], 'P10_OFF')?.reward_id, 'reward-b')
 })
 
 test('结算台可选奖励去重后按类型给出', () => {
   const rewards = [
-    reward('TWO_POUND', { reward_id: 'reward-a' }),
-    reward('TWO_POUND', { reward_id: 'reward-b', cycle_index: 2 }),
-    reward('PERSONAL_15_OFF', { reward_id: 'reward-c' }),
-    reward('VIP_MONTH', { reward_id: 'reward-d' }),
+    reward('P10_OFF', { reward_id: 'reward-a' }),
+    reward('P10_OFF', { reward_id: 'reward-b', cycle_index: 2 }),
+    reward('P20_OFF', { reward_id: 'reward-c' }),
+    reward('P50_OFF', { reward_id: 'reward-d', used_at: '2026-09-20T10:00:00Z' }),
   ]
-  assert.deepEqual(usableRewardTypes(rewards), ['TWO_POUND', 'PERSONAL_15_OFF'])
-})
-
-// ── VIP Month ───────────────────────────────────────────────────────────────
-
-test('VIP 有效期 30 天含首尾：9 月 18 日激活，10 月 17 日整天仍有效', () => {
-  assert.equal(VIP_MONTH_DAYS, 30)
-  assert.equal(vipExpiresOn('2026-09-18'), '2026-10-17')
-  const benefit: VipBenefitRow = {
-    benefit_id: 'benefit-1', reward_id: 'reward-1',
-    activated_on: '2026-09-18', expires_on: '2026-10-17',
-  }
-  assert.equal(isVipBenefitActiveOn(benefit, '2026-09-17'), false)
-  assert.equal(isVipBenefitActiveOn(benefit, '2026-09-18'), true)
-  assert.equal(isVipBenefitActiveOn(benefit, '2026-10-17'), true)
-  assert.equal(isVipBenefitActiveOn(benefit, '2026-10-18'), false)
-})
-
-test('跨月与跨年的有效期推算', () => {
-  assert.equal(vipExpiresOn('2026-10-17'), '2026-11-15')
-  assert.equal(vipExpiresOn('2026-12-20'), '2027-01-18')
-  assert.equal(vipExpiresOn('2028-02-01'), '2028-03-01')
-})
-
-test('未激活的 VIP Month 不生效', () => {
-  const notActivated: VipBenefitRow = {
-    benefit_id: 'benefit-2', reward_id: 'reward-2', activated_on: null, expires_on: null,
-  }
-  assert.equal(isVipBenefitActiveOn(notActivated, '2026-09-18'), false)
-  assert.equal(isVipActive([notActivated], '2026-09-18'), false)
-})
-
-test('VIP 月卡奖励自身的状态：未激活 / 生效中（含到期日）/ 已结束', () => {
-  const pending = { benefit_id: 'b1', reward_id: 'r1', activated_on: null, expires_on: null }
-  const running = { benefit_id: 'b2', reward_id: 'r2', activated_on: '2026-09-17', expires_on: '2026-10-16' }
-
-  assert.equal(vipRewardState(pending, '2026-09-20'), 'ready')
-  assert.equal(vipRewardState(running, '2026-09-17'), 'active')   // 激活当天
-  assert.equal(vipRewardState(running, '2026-10-16'), 'active')   // 到期日当天仍生效
-  assert.equal(vipRewardState(running, '2026-10-17'), 'ended')    // 次日结束
-  assert.equal(vipRewardState(null, '2026-09-20'), null)          // 不是月卡（没有权益行）
-})
-
-test('可以累计多张未激活的 VIP Month，同一时间只有一张生效', () => {
-  const rewards = [
-    reward('VIP_MONTH', { reward_id: 'reward-v1', cycle_index: 1 }),
-    reward('VIP_MONTH', { reward_id: 'reward-v2', cycle_index: 2 }),
-  ]
-  const benefits: VipBenefitRow[] = [
-    { benefit_id: 'b1', reward_id: 'reward-v1', activated_on: '2026-09-18', expires_on: '2026-10-17' },
-    { benefit_id: 'b2', reward_id: 'reward-v2', activated_on: null, expires_on: null },
-  ]
-  const summary = vipMonthSummary(rewards, benefits, '2026-09-20')
-  assert.equal(summary.active?.benefit_id, 'b1')
-  assert.equal(summary.readyToActivate, 1)
-  assert.equal(summary.activated, 1)
-  assert.deepEqual(canActivateVip(benefits, '2026-09-20'), { ok: false, error: 'VIP_ALREADY_ACTIVE' })
-
-  // 到期之后不会自动续上，需要再手动激活
-  assert.deepEqual(canActivateVip(benefits, '2026-10-18'), { ok: true })
-  assert.equal(vipMonthSummary(rewards, benefits, '2026-10-18').active, null)
+  assert.deepEqual(usableRewardTypes(rewards), ['P10_OFF', 'P20_OFF'])
 })
 
 // ── 折扣计算 ────────────────────────────────────────────────────────────────
 
-test('£2 / £5 Voucher 抵扣金额与封顶', () => {
-  const two = computeMemberDiscount('member_reward', { amountGbp: 13.99, vipActive: false, rewardType: 'TWO_POUND' })
-  assert.equal(two.ok && two.preview.discountAmountPence, TWO_POUND_PENCE)
-  assert.equal(two.ok && two.preview.finalGbp, 11.99)
-
-  const five = computeMemberDiscount('member_reward', { amountGbp: 3.5, vipActive: false, rewardType: 'FIVE_POUND' })
-  assert.equal(five.ok && five.preview.discountAmountPence, 350)
-  assert.equal(five.ok && five.preview.finalGbp, 0)
-  assert.ok(five.ok && five.preview.discountAmountPence <= FIVE_POUND_PENCE)
+test('四档折扣金额按分四舍五入（以 £13.99 = 1399p 为例）', () => {
+  const cases: [RewardType, number, number][] = [
+    // 折 10% → 减 140p → 付 £12.59
+    ['P10_OFF', 140, 12.59],
+    // 折 20% → 减 280p → 付 £11.19
+    ['P20_OFF', 280, 11.19],
+    // 折 30% → 减 420p → 付 £9.79
+    ['P30_OFF', 420, 9.79],
+    // 折 50% → 减 700p → 付 £6.99
+    ['P50_OFF', 700, 6.99],
+  ]
+  for (const [type, discountPence, finalGbp] of cases) {
+    const computed = computeMemberDiscount('member_reward', { amountGbp: 13.99, rewardType: type })
+    assert.equal(computed.ok, true, `${type} 应该算得出折扣`)
+    if (!computed.ok) continue
+    assert.equal(computed.preview.discountValue, REWARD_DISCOUNT_PERCENT[type])
+    assert.equal(computed.preview.discountType, 'percentage_off')
+    assert.equal(computed.preview.discountAmountPence, discountPence)
+    assert.equal(computed.preview.finalGbp, finalGbp)
+  }
 })
 
-test('本人 15% 与朋友 10% 按分四舍五入', () => {
-  const personal = computeMemberDiscount('member_reward', { amountGbp: 13.99, vipActive: false, rewardType: 'PERSONAL_15_OFF' })
-  assert.equal(personal.ok && personal.preview.discountAmountPence, 210)
-  assert.equal(personal.ok && personal.preview.discountValue, PERSONAL_DISCOUNT_PERCENT)
-
-  const friend = computeMemberDiscount('member_reward', { amountGbp: 13.99, vipActive: false, rewardType: 'FRIEND_10_OFF' })
-  assert.equal(friend.ok && friend.preview.discountAmountPence, 140)
-
-  assert.equal(percentOffPence(1399, 15), 210)
+test('percentOffPence 与 SQL 的 ROUND(原价 pence × 百分比 / 100) 同口径', () => {
   assert.equal(percentOffPence(1399, 10), 140)
-  assert.equal(percentOffPence(100, 15), 15)
+  assert.equal(percentOffPence(1399, 20), 280)
+  assert.equal(percentOffPence(1399, 30), 420)
+  assert.equal(percentOffPence(1399, 50), 700)
+  assert.equal(percentOffPence(100, 50), 50)
 })
 
 test('折扣金额跟着仓库真实定价走', () => {
   const bill = calcBill(150)
-  const vip = computeMemberDiscount('vip_month', { amountGbp: bill.totalGbp, vipActive: true })
-  assert.equal(vip.ok, true)
-  if (!vip.ok) return
-  assert.equal(vip.preview.discountAmountPence, Math.round(bill.totalGbp * 100 * 15 / 100))
-  assert.equal(vip.preview.preDiscountGbp, bill.totalGbp)
+  const p50 = computeMemberDiscount('member_reward', { amountGbp: bill.totalGbp, rewardType: 'P50_OFF' })
+  assert.equal(p50.ok, true)
+  if (!p50.ok) return
+  assert.equal(p50.preview.discountAmountPence, Math.round(bill.totalGbp * 100 * 50 / 100))
+  assert.equal(p50.preview.preDiscountGbp, bill.totalGbp)
 })
 
 test('不打折时金额原样返回', () => {
-  const none = computeMemberDiscount('none', { amountGbp: 25.99, vipActive: false })
+  const none = computeMemberDiscount('none', { amountGbp: 25.99 })
   assert.equal(none.ok && none.preview.discountAmountPence, 0)
   assert.equal(none.ok && none.preview.finalGbp, 25.99)
 })
 
-test('VIP 生效期间：不选优惠被拒，手动改用券或奖励放行（业主 2026-09-16 口径）', () => {
-  // 默认走 VIP，但「什么都不选」会让 VIP 会员按原价结账，属于漏选，必须拦住
-  const blocked = computeMemberDiscount('none', { amountGbp: 13.99, vipActive: true })
-  assert.deepEqual(blocked, { ok: false, error: 'VIP_MUST_BE_APPLIED' })
-
-  // 店员在柜台改用会员奖励：当次放弃 VIP 折扣，金额按奖励算
-  const overridden = computeMemberDiscount('member_reward', { amountGbp: 13.99, vipActive: true, rewardType: 'TWO_POUND' })
-  assert.equal(overridden.ok, true)
-  if (overridden.ok) assert.equal(overridden.preview.discountAmountPence, 200)
-
-  const notVip = computeMemberDiscount('vip_month', { amountGbp: 13.99, vipActive: false })
-  assert.deepEqual(notVip, { ok: false, error: 'VIP_NOT_ACTIVE' })
-})
-
 test('会员奖励的入参校验', () => {
   assert.deepEqual(
-    computeMemberDiscount('member_reward', { amountGbp: 13.99, vipActive: false }),
+    computeMemberDiscount('member_reward', { amountGbp: 13.99 }),
     { ok: false, error: 'REWARD_TYPE_INVALID' },
   )
   assert.deepEqual(
-    computeMemberDiscount('member_reward', { amountGbp: 13.99, vipActive: false, rewardType: 'VIP_MONTH' }),
+    computeMemberDiscount('member_reward', { amountGbp: 13.99, rewardType: null }),
     { ok: false, error: 'REWARD_TYPE_INVALID' },
   )
   assert.deepEqual(
-    computeMemberDiscount('none', { amountGbp: null, vipActive: false }),
+    computeMemberDiscount('none', { amountGbp: null }),
     { ok: false, error: 'SESSION_AMOUNT_MISSING' },
   )
   assert.deepEqual(
-    computeMemberDiscount('coupon', { amountGbp: 13.99, vipActive: false }),
+    computeMemberDiscount('coupon', { amountGbp: 13.99 }),
     { ok: false, error: 'COUPON_SOURCE_NOT_HANDLED' },
   )
   assert.deepEqual(
-    computeMemberDiscount('bogus' as never, { amountGbp: 13.99, vipActive: false }),
+    computeMemberDiscount('bogus' as never, { amountGbp: 13.99 }),
     { ok: false, error: 'DISCOUNT_SOURCE_INVALID' },
   )
 })

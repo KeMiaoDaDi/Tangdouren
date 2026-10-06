@@ -79,13 +79,13 @@ def show_rows(rows, title):
 PREFLIGHT = """
 SELECT
   (SELECT count(*) FROM information_schema.tables
-    WHERE table_schema='public' AND table_name IN ('members','member_rewards','member_benefits')) AS member_tables,
+    WHERE table_schema='public' AND table_name IN ('members','member_rewards')) AS member_tables,
   (SELECT count(*) FROM information_schema.views
     WHERE table_schema='public' AND table_name='member_visit_days') AS visit_view,
   (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
     WHERE n.nspname='public' AND p.proname IN
       ('settle_timer_session','unsettle_timer_session','ensure_member_rewards',
-       'member_vip_active','link_timer_session_to_member','activate_member_vip')) AS member_functions,
+       'link_timer_session_to_member')) AS member_functions,
   (SELECT count(*) FROM information_schema.columns
     WHERE table_schema='public' AND table_name='timer_sessions' AND column_name='member_id') AS ts_member_id,
   (SELECT count(*) FROM information_schema.columns
@@ -121,7 +121,7 @@ def main():
             if result is None:
                 return
             print(f"✓ {name} 执行完成：{result if result else '（无返回）'}")
-        show_rows(run_sql(token, PREFLIGHT, "迁移后结构"), "迁移后结构（预期全是 1 / members 表 3）")
+        show_rows(run_sql(token, PREFLIGHT, "迁移后结构"), "迁移后结构（预期 2 张表 / 4 个函数 / 各列齐全）")
 
     if mode in ("verify", "all"):
         path = WORKDIR / "verify_member_system.sql"

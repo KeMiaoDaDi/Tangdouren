@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
-  activateVipMonth,
-  associateFriendRewardCoupon,
   findMemberById,
   getMemberDashboard,
   linkSessionToMember,
@@ -13,25 +11,21 @@ import {
 } from '@/lib/member/service'
 import { londonDateOf } from '@/lib/member/member'
 
-// ── 后台会员详情与操作（PRD 16）───────────────────────────────────────────────
-// 允许：挂订单、核销奖励、把朋友券关联到优惠券、代激活 VIP、停用会员。
-// 禁止：手动加减 Visit、直接改 Reward Progress、改邮箱、删历史（PRD 16.3）。
+// ── 后台会员详情与操作 ────────────────────────────────────────────────────────
+// 允许：挂订单、停用/恢复会员、改姓名。
+// 禁止：手动加减 Visit、直接改 Reward Progress、改邮箱、删历史。
 
 type Action =
   | 'disable'
   | 'enable'
   | 'update_name'
   | 'link_session'
-  | 'activate_vip'
-  | 'associate_friend_coupon'
 
 interface PatchBody {
   action:       Action
   is_active?:   boolean
   display_name?: string
   session_id?:  string
-  reward_id?:   string
-  coupon_code?: string
 }
 
 export async function GET(
@@ -74,7 +68,7 @@ export async function PATCH(
   const body   = await request.json() as PatchBody
   const admin  = createAdminClient()
 
-  const allowed: Action[] = ['disable', 'enable', 'update_name', 'link_session', 'activate_vip', 'associate_friend_coupon']
+  const allowed: Action[] = ['disable', 'enable', 'update_name', 'link_session']
   if (!allowed.includes(body.action)) {
     return NextResponse.json({ error: '无效操作' }, { status: 400 })
   }
@@ -101,21 +95,6 @@ export async function PATCH(
       if (!result.ok) return NextResponse.json({ error: mapMemberError(result.error) }, { status: 409 })
       return NextResponse.json({ success: true })
     }
-
-    if (body.action === 'activate_vip') {
-      if (!body.reward_id) return NextResponse.json({ error: '缺少奖励参数' }, { status: 400 })
-      const result = await activateVipMonth(admin, body.reward_id, user.email ?? user.id)
-      if (!result.ok) return NextResponse.json({ error: mapMemberError(result.error) }, { status: 409 })
-      return NextResponse.json({ benefit: result.benefit })
-    }
-
-    // associate_friend_coupon
-    if (!body.reward_id || !body.coupon_code) {
-      return NextResponse.json({ error: '缺少奖励或优惠券参数' }, { status: 400 })
-    }
-    const linked = await associateFriendRewardCoupon(admin, body.reward_id, body.coupon_code)
-    if (!linked.ok) return NextResponse.json({ error: mapMemberError(linked.error) }, { status: 409 })
-    return NextResponse.json({ success: true })
 
   } catch (err) {
     const code = err instanceof Error ? err.message : ''

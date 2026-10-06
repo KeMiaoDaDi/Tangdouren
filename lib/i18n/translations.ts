@@ -339,7 +339,7 @@ export const t = {
   step4Submitting:   { zh: '处理中…',        en: 'Processing…' },
   step4Submit:       { zh: '确认预约',        en: 'Confirm Booking' },
   step4JoinClub:     { zh: '顺便加入糖豆人会员', en: 'Also join Tangdouren Membership' },
-  step4JoinClubHint: { zh: '每次到店计时都累积进度：满 2 次 £2 抵用券，满 5 次 £5，满 8 次本人 85 折加朋友 9 折，满 10 次送一张 VIP 月卡。不想加入也能直接预约。', en: 'Every in-store visit builds progress: 2 visits for a £2 voucher, 5 for £5, 8 for 15% off for you and 10% off for a friend, 10 for a VIP Month. Joining is optional.' },
+  step4JoinClubHint: { zh: '每次到店计时都累积进度：满 3 次打 9 折，满 5 次 8 折，满 7 次 7 折，满 10 次 5 折。不想加入也能直接预约。', en: 'Every in-store visit builds progress: 3 visits for 10% off, 5 for 20% off, 7 for 30% off, 10 for 50% off. Joining is optional.' },
   step5MemberJoined: { zh: '✅ 你已加入糖豆人会员，到店扫码后就能用自己的手机看到进度。', en: '✅ You have joined Tangdouren Membership — scan in store to track your progress on your phone.' },
   step4NetworkErr:   { zh: '网络错误，请检查连接后重试', en: 'Network error, please check your connection and try again' },
 

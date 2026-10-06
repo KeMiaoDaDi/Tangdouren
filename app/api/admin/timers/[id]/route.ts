@@ -7,7 +7,7 @@ import { calcBillingMinutes, calcBill } from '@/lib/timer/pricing'
 import { resolveActiveSeatCodeFromValue } from '@/lib/timer/selfService'
 import { computeSettlement } from '@/lib/coupon/coupon'
 import { loadSettlementContext, mapRpcError } from '@/lib/coupon/service'
-import { computeMemberDiscount, londonDateOf, type DiscountSource, type RewardType } from '@/lib/member/member'
+import { computeMemberDiscount, type DiscountSource, type RewardType } from '@/lib/member/member'
 import { getMemberSettleInfo, mapMemberError } from '@/lib/member/service'
 
 type Action = 'start' | 'pause' | 'resume' | 'stop' | 'settle' | 'unsettle' | 'update_table'
@@ -34,14 +34,12 @@ export async function GET(
   // 结算台要显示这个订单的会员是谁：邮箱没有验证过，店员核对柜台前的人是目前唯一的防线
   let member = null
   if (data.member_id) {
-    const info = await getMemberSettleInfo(admin, data.member_id as string, londonDateOf(new Date()))
+    const info = await getMemberSettleInfo(admin, data.member_id as string)
     if (info) {
       member = {
         member_id:           info.member.member_id,
         display_name:        info.member.display_name,
         email:               info.member.email,
-        vip_active:          info.vipActive,
-        vip_expires_on:      info.vipExpiresOn,
         usable_reward_types: info.usableTypes,
       }
     }
@@ -94,7 +92,6 @@ export async function PATCH(
     settlement_note?: string
     table_number?:    string
     discount_source?: DiscountSource
-    member_id?:       string   // 朋友用券时，折扣出自另一位会员（PRD 10.3）
     reward_type?:     RewardType
   }
   const { action } = body
@@ -145,20 +142,15 @@ export async function PATCH(
     if (!ctx.ok) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
 
     const sessionMemberId = (session.member_id as string | null) ?? null
-    // 朋友用券时折扣出自另一位会员，所以「奖励的拥有者」可能不等于本单的归属人
-    const sponsorMemberId = body.member_id ?? sessionMemberId
-    const memberInfo = sponsorMemberId
-      ? await getMemberSettleInfo(admin, sponsorMemberId, londonDateOf(new Date()))
+    const memberInfo = sessionMemberId
+      ? await getMemberSettleInfo(admin, sessionMemberId)
       : null
 
-    // 没显式指定来源时：本单会员有生效中的 VIP 就默认走 VIP（PRD 11.4），
-    // 否则按有没有券码决定用券还是不用优惠。
-    // 前端显式传来源的情况里包含「VIP 期间店员手动改用券或奖励」（业主 2026-09-16 口径），
+    // 没显式指定来源时：按有没有券码决定用券还是不用优惠。
+    // 会员奖励只在店员显式选择时使用（前端传 discount_source='member_reward'），
     // 那条路径同样由数据库复核金额，最终以服务端算出来的为准。
     const source: DiscountSource = body.discount_source
-      ?? (memberInfo?.vipActive && sponsorMemberId === sessionMemberId ? 'vip_month'
-        : body.coupon_code ? 'coupon'
-        : 'none')
+      ?? (body.coupon_code ? 'coupon' : 'none')
 
     let discountPence: number
     let preview: unknown
@@ -173,7 +165,6 @@ export async function PATCH(
     } else {
       const computed = computeMemberDiscount(source, {
         amountGbp:  ctx.context.session.amount_gbp,
-        vipActive:  Boolean(memberInfo?.vipActive),
         rewardType: body.reward_type ?? null,
       })
       if (!computed.ok) return NextResponse.json({ error: mapMemberError(computed.error) }, { status: 400 })
@@ -191,10 +182,10 @@ export async function PATCH(
       p_coupon_code:           couponCode,
       p_discount_amount_pence: discountPence,
     }
-    if (source === 'member_reward' || source === 'vip_month') {
+    if (source === 'member_reward') {
       rpcParams.p_discount_source = source
-      rpcParams.p_member_id       = source === 'member_reward' ? sponsorMemberId : sessionMemberId
-      rpcParams.p_reward_type     = source === 'member_reward' ? (body.reward_type ?? null) : null
+      rpcParams.p_member_id       = sessionMemberId
+      rpcParams.p_reward_type     = body.reward_type ?? null
     }
 
     const { data: settled, error: rpcErr } = await admin.rpc('settle_timer_session', rpcParams)
