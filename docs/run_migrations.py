@@ -20,8 +20,8 @@ import urllib.request
 
 PROJECT_REF = "rlakqwmedlgpcdasvads"
 API = f"https://api.supabase.com/v1/projects/{PROJECT_REF}/database/query"
-REPO = pathlib.Path.home() / "Desktop/Projects/Tangdouren"
 WORKDIR = pathlib.Path(__file__).resolve().parent
+REPO = WORKDIR.parent   # 仓库根目录（docs/ 的上一级）
 TOKEN_FILE = pathlib.Path.home() / ".hermes/secrets/supabase_pat"
 
 
@@ -79,17 +79,19 @@ def show_rows(rows, title):
 PREFLIGHT = """
 SELECT
   (SELECT count(*) FROM information_schema.tables
-    WHERE table_schema='public' AND table_name IN ('members','member_rewards')) AS member_tables,
+    WHERE table_schema='public' AND table_name IN ('members')) AS member_tables,
   (SELECT count(*) FROM information_schema.views
     WHERE table_schema='public' AND table_name='member_visit_days') AS visit_view,
   (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
     WHERE n.nspname='public' AND p.proname IN
-      ('settle_timer_session','unsettle_timer_session','ensure_member_rewards',
+      ('settle_timer_session','unsettle_timer_session',
        'link_timer_session_to_member')) AS member_functions,
   (SELECT count(*) FROM information_schema.columns
     WHERE table_schema='public' AND table_name='timer_sessions' AND column_name='member_id') AS ts_member_id,
   (SELECT count(*) FROM information_schema.columns
     WHERE table_schema='public' AND table_name='timer_sessions' AND column_name='reward_eligible') AS ts_reward_eligible,
+  (SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='timer_sessions' AND column_name='discount_source_snapshot') AS ts_discount_source,
   (SELECT count(*) FROM information_schema.columns
     WHERE table_schema='public' AND table_name='bookings' AND column_name='member_id') AS bk_member_id,
   (SELECT count(*) FROM information_schema.columns
@@ -113,7 +115,7 @@ def main():
         show_rows(run_sql(token, NOT_NULLS, "timer_sessions 的 NOT NULL 列"), "必填列")
 
     if mode in ("migrate", "all"):
-        for name in ("016_members.sql", "017_member_settlement.sql"):
+        for name in ("016_members.sql", "017_member_settlement.sql", "018_member_threshold_discount.sql"):
             path = REPO / "supabase/migrations" / name
             sql = path.read_text(encoding="utf-8")
             print(f"\n▶ 执行 {name}（{len(sql.encode('utf-8'))} 字节）…")
@@ -121,7 +123,7 @@ def main():
             if result is None:
                 return
             print(f"✓ {name} 执行完成：{result if result else '（无返回）'}")
-        show_rows(run_sql(token, PREFLIGHT, "迁移后结构"), "迁移后结构（预期 2 张表 / 4 个函数 / 各列齐全）")
+        show_rows(run_sql(token, PREFLIGHT, "迁移后结构"), "迁移后结构（预期 1 张表 / 3 个函数 / 各列齐全）")
 
     if mode in ("verify", "all"):
         path = WORKDIR / "verify_member_system.sql"

@@ -1,7 +1,8 @@
 'use client'
 
-// 会员首页：同页展示进度、奖励、到店记录，不拆成二级入口。
-// 原「我的奖励」与「奖励记录」是同一份数据的两个视图（后者是前者的超集），合并成一块。
+// 会员首页：同页展示进度、折扣规则、到店记录，不拆成二级入口。
+// 折扣不再落库成「可核销的券」，而是到店次数达标的那一单自动打折；
+// 因此这里只展示进度提示 + 每次到店是否享了折扣。
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -9,7 +10,7 @@ import { ArrowLeft, CalendarCheck, Gift, Sparkles } from 'lucide-react'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
 import MemberProgressBar from '@/components/member/MemberProgressBar'
 import { forgetMember, readRememberedMember } from '@/lib/member/client'
-import type { MemberDashboard, MemberRewardEntry, MemberVisitEntry } from '@/lib/member/service'
+import type { MemberDashboard, MemberVisitEntry } from '@/lib/member/service'
 import type { RewardType } from '@/lib/member/member'
 
 const copy = {
@@ -18,11 +19,10 @@ const copy = {
     hi:           (name: string) => `你好，${name}`,
     loading:      '正在读取会员信息…',
     startAsMember:'以会员身份开始计时',
-    myRewards:    '我的奖励',
     recentVisits: '最近到店',
+    discountRules:'折扣规则',
     viewAll:      '查看全部',
     collapse:     '收起',
-    noRewards:    '还没有解锁奖励，计满 3 次就能拿到第一张 9 折。',
     noVisits:     '还没有可显示的到店记录。',
     notMember:    '这台设备上没有记住会员身份。',
     backToTimer:  '回到首页',
@@ -33,27 +33,21 @@ const copy = {
       P30_OFF: '7折',
       P50_OFF: '5折',
     } as Record<RewardType, string>,
-    states: {
-      available: '可用',
-      used:      '已使用',
-    },
     progressCounted: '计入进度',
     progressPaused:  '未计入进度',
-    usedReward:      (name: string) => `使用了${name}`,
-    noRewardUsed:    '未使用会员优惠',
-    unlockedOn:      (d: string) => `${d} 解锁`,
-    usedOn:          (d: string) => `${d} 使用`,
+    enjoyedDiscount: (name: string) => `本次享${name}`,
+    noDiscount:      '未享会员折扣',
+    ruleText: '到店自动打折：第 3 次享 9 折、第 5 次享 8 折、第 7 次享 7 折、第 10 次享 5 折，满 10 次重新循环。',
   },
   en: {
     title:        'Tangdouren Membership',
     hi:           (name: string) => `Hi ${name}`,
     loading:      'Loading your membership…',
     startAsMember:'Start as Member',
-    myRewards:    'My Rewards',
     recentVisits: 'Recent Visits',
+    discountRules:'Discount Rules',
     viewAll:      'View all',
     collapse:     'Show less',
-    noRewards:    'No rewards yet — three visits unlock your first 10% off.',
     noVisits:     'No visits to show yet.',
     notMember:    'This device does not remember a membership.',
     backToTimer:  'Back to home',
@@ -64,16 +58,11 @@ const copy = {
       P30_OFF: '30% off',
       P50_OFF: '50% off',
     } as Record<RewardType, string>,
-    states: {
-      available: 'Available',
-      used:      'Used',
-    },
     progressCounted: 'Counted',
     progressPaused:  'Not counted',
-    usedReward:      (name: string) => `Used ${name}`,
-    noRewardUsed:    'No member discount',
-    unlockedOn:      (d: string) => `Unlocked ${d}`,
-    usedOn:          (d: string) => `Used ${d}`,
+    enjoyedDiscount: (name: string) => `${name} this visit`,
+    noDiscount:      'No member discount',
+    ruleText: 'Automatic discounts: 10% off on visit 3, 20% off on 5, 30% off on 7, 50% off on 10, then the cycle repeats.',
   },
 } as const
 
@@ -90,7 +79,6 @@ export default function ClubPage() {
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
   const [showAllVisits, setShowAllVisits] = useState(false)
-  const [showAllRewards, setShowAllRewards] = useState(false)
 
   const load = useCallback(async () => {
     const remembered = readRememberedMember()
@@ -120,14 +108,7 @@ export default function ClubPage() {
   }
 
   const memberName = dashboard?.member.display_name ?? ''
-
-  /** 奖励行右侧的状态。现在只有「可用 / 已使用」两种。 */
-  const rewardBadge = (entry: MemberRewardEntry): { text: string; tone: string } => ({
-    text: c.states[entry.state],
-    tone: entry.state === 'available' ? 'text-sage' : 'text-charcoal-light',
-  })
-  const visitRows   = dashboard?.visit_history ?? []
-  const rewardRows  = dashboard?.rewards ?? []
+  const visitRows  = dashboard?.visit_history ?? []
 
   // 英文版暂不开放会员制度（业主 2026-09-17）：英文界面只给一句提示与切回中文的按钮。
   // 会员页本身是中文优先的页面，数据与接口都没变，中文界面照旧。
@@ -192,35 +173,13 @@ export default function ClubPage() {
               {c.startAsMember}
             </button>
 
-            {/* ── My Rewards ─────────────────────────────────────────────── */}
-            <div className="card space-y-3 p-5">
+            {/* ── Discount Rules ─────────────────────────────────────────── */}
+            <div className="card space-y-2 p-5">
               <div className="flex items-center gap-2">
                 <Gift size={16} className="text-terracotta" />
-                <h2 className="font-display text-lg font-semibold text-charcoal">{c.myRewards}</h2>
+                <h2 className="font-display text-lg font-semibold text-charcoal">{c.discountRules}</h2>
               </div>
-              {rewardRows.length === 0 && <p className="text-sm text-charcoal-light">{c.noRewards}</p>}
-              <ul className="space-y-2">
-                {(showAllRewards ? rewardRows : rewardRows.slice(0, 5)).map((entry: MemberRewardEntry) => {
-                  const badge = rewardBadge(entry)
-                  return (
-                    <li key={entry.reward.reward_id} className="rounded-2xl border border-sand-100 bg-white px-3 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-charcoal">{c.rewardNames[entry.reward.reward_type]}</span>
-                        <span className={`text-xs ${badge.tone}`}>{badge.text}</span>
-                      </div>
-                      <p className="mt-0.5 text-xs text-charcoal-light">
-                        {c.unlockedOn(dateOf(entry.reward.unlocked_at))}
-                        {entry.reward.used_at && ` · ${c.usedOn(dateOf(entry.reward.used_at))}`}
-                      </p>
-                    </li>
-                  )
-                })}
-              </ul>
-              {rewardRows.length > 5 && (
-                <button className="btn-ghost w-full text-sm" onClick={() => setShowAllRewards(v => !v)}>
-                  {showAllRewards ? c.collapse : c.viewAll}
-                </button>
-              )}
+              <p className="text-sm leading-6 text-charcoal-light">{c.ruleText}</p>
             </div>
 
             {/* ── Recent Visits ──────────────────────────────────────────── */}
@@ -241,8 +200,8 @@ export default function ClubPage() {
                     </div>
                     <p className="mt-0.5 text-xs text-charcoal-light">
                       {visit.used_reward
-                        ? c.usedReward(c.rewardNames[visit.used_reward])
-                        : c.noRewardUsed}
+                        ? c.enjoyedDiscount(c.rewardNames[visit.used_reward])
+                        : c.noDiscount}
                     </p>
                   </li>
                 ))}

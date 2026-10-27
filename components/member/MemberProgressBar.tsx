@@ -1,8 +1,8 @@
 'use client'
 
-// 会员进度条：十格循环显示，3 / 5 / 7 / 10 是奖励节点。
+// 会员进度条：十格循环显示，3 / 5 / 7 / 10 是折扣节点。
 // 顾客端不出现「第几轮」这类概念，只显示本轮的第几格。
-// 奖励说明：每个奖励节点都带 title（电脑上鼠标悬停可见）；
+// 折扣说明：每个折扣节点都带 title（电脑上鼠标悬停可见）；
 // expandable = true 时再支持「点一下展开」（顾客端多是手机，没有悬停这回事）。
 
 import { useState } from 'react'
@@ -14,8 +14,7 @@ const copy = {
   zh: {
     visits:        (done: number, total: number) => `${done} / ${total} 次到店`,
     lifetime:      (n: number) => `累计到店 ${n} 次`,
-    toNext:        (n: number) => `再 ${n} 次解锁下一个奖励`,
-    nextIs:        '下一个奖励',
+    toNext:        (n: number, label: string) => `再 ${n} 次到店，下次享 ${label}`,
     roundDone:     '本轮已完成，下一格自动开始新一轮',
     atNode:        (n: number) => `第 ${n} 次`,
     rewards: {
@@ -25,17 +24,16 @@ const copy = {
       P50_OFF: '5折',
     } as Record<RewardType, string>,
     hints: {
-      P10_OFF: '9折：下次到店结算打 9 折',
-      P20_OFF: '8折：下次到店结算打 8 折',
-      P30_OFF: '7折：下次到店结算打 7 折',
-      P50_OFF: '5折：下次到店结算打 5 折',
+      P10_OFF: '到店达到该档时，那单自动享 9 折',
+      P20_OFF: '到店达到该档时，那单自动享 8 折',
+      P30_OFF: '到店达到该档时，那单自动享 7 折',
+      P50_OFF: '到店达到该档时，那单自动享 5 折',
     } as Record<RewardType, string>,
   },
   en: {
     visits:        (done: number, total: number) => `${done} / ${total} visits`,
     lifetime:      (n: number) => `Lifetime visits: ${n}`,
-    toNext:        (n: number) => `${n} more ${n === 1 ? 'visit' : 'visits'} to your next reward`,
-    nextIs:        'Next reward',
+    toNext:        (n: number, label: string) => `${n} more ${n === 1 ? 'visit' : 'visits'} until your next ${label}`,
     roundDone:     'This round is complete, the next visit starts a new round',
     atNode:        (n: number) => `Visit ${n}`,
     rewards: {
@@ -45,10 +43,10 @@ const copy = {
       P50_OFF: '50% off',
     } as Record<RewardType, string>,
     hints: {
-      P10_OFF: '10% off: use it on your next settlement',
-      P20_OFF: '20% off: use it on your next settlement',
-      P30_OFF: '30% off: use it on your next settlement',
-      P50_OFF: '50% off: use it on your next settlement',
+      P10_OFF: '10% off applies automatically on the visit that reaches this node',
+      P20_OFF: '20% off applies automatically on the visit that reaches this node',
+      P30_OFF: '30% off applies automatically on the visit that reaches this node',
+      P50_OFF: '50% off applies automatically on the visit that reaches this node',
     } as Record<RewardType, string>,
   },
 } as const
@@ -59,7 +57,7 @@ interface Props {
   nextReward:     NextReward | null
   lifetimeVisits: number
   lang:           Lang
-  /** 顾客端传 true：奖励节点可以点一下展开说明（手机没有悬停） */
+  /** 顾客端传 true：折扣节点可以点一下展开说明（手机没有悬停） */
   expandable?:    boolean
 }
 
@@ -67,7 +65,7 @@ export default function MemberProgressBar({ cells, cycleProgress, nextReward, li
   const c = copy[lang]
   const [openNode, setOpenNode] = useState<number | null>(null)
 
-  /** 一个节点上挂着的奖励类型（现在每个节点一种），说明合并显示 */
+  /** 一个节点上挂着的折扣类型（现在每个节点一种），说明合并显示 */
   const nodeHint = (types: readonly RewardType[]) =>
     types.map(rt => c.hints[rt]).filter((v, i, a) => a.indexOf(v) === i).join(' · ')
 
@@ -119,8 +117,9 @@ export default function MemberProgressBar({ cells, cycleProgress, nextReward, li
       </div>
 
       <p className="mt-3 text-sm text-charcoal">
-        {nextReward ? c.toNext(nextReward.remaining) : c.roundDone}
-        {nextReward && <span className="ml-1 text-charcoal-light">({c.nextIs}: {nextReward.rewardTypes.map(rt => c.rewards[rt]).filter((v, i, a) => a.indexOf(v) === i).join('/')})</span>}
+        {nextReward
+          ? c.toNext(nextReward.remaining, nextReward.rewardTypes.map(rt => c.rewards[rt]).filter((v, i, a) => a.indexOf(v) === i).join('/'))
+          : c.roundDone}
       </p>
       <p className="mt-1 text-xs text-charcoal-light">{c.lifetime(lifetimeVisits)}</p>
 

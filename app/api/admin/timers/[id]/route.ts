@@ -8,7 +8,7 @@ import { resolveActiveSeatCodeFromValue } from '@/lib/timer/selfService'
 import { computeSettlement } from '@/lib/coupon/coupon'
 import { loadSettlementContext, mapRpcError } from '@/lib/coupon/service'
 import { computeMemberDiscount, type DiscountSource, type RewardType } from '@/lib/member/member'
-import { getMemberSettleInfo, mapMemberError } from '@/lib/member/service'
+import { findMemberById, getMemberThresholdDiscount, mapMemberError } from '@/lib/member/service'
 
 type Action = 'start' | 'pause' | 'resume' | 'stop' | 'settle' | 'unsettle' | 'update_table'
 
@@ -34,13 +34,21 @@ export async function GET(
   // 结算台要显示这个订单的会员是谁：邮箱没有验证过，店员核对柜台前的人是目前唯一的防线
   let member = null
   if (data.member_id) {
-    const info = await getMemberSettleInfo(admin, data.member_id as string)
-    if (info) {
+    const m = await findMemberById(admin, data.member_id as string)
+    if (m) {
+      const threshold = data.started_at
+        ? await getMemberThresholdDiscount(admin, m.member_id, {
+            session_id: data.session_id,
+            started_at: data.started_at as string,
+          })
+        : null
       member = {
-        member_id:           info.member.member_id,
-        display_name:        info.member.display_name,
-        email:               info.member.email,
-        usable_reward_types: info.usableTypes,
+        member_id:          m.member_id,
+        display_name:       m.display_name,
+        email:              m.email,
+        threshold_discount: threshold
+          ? { rewardType: threshold.rewardType, threshold: threshold.threshold }
+          : null,
       }
     }
   }
@@ -142,15 +150,23 @@ export async function PATCH(
     if (!ctx.ok) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
 
     const sessionMemberId = (session.member_id as string | null) ?? null
-    const memberInfo = sessionMemberId
-      ? await getMemberSettleInfo(admin, sessionMemberId)
+
+    // 达标自动打折：有会员归属时先判断这一单是否「当天第一笔且累计落到档位」。
+    // 是则会员折扣优先、券码被拒；否则按券/无优惠走。
+    const threshold = sessionMemberId && session.started_at
+      ? await getMemberThresholdDiscount(admin, sessionMemberId, {
+          session_id: session.session_id,
+          started_at:  session.started_at as string,
+        })
       : null
 
-    // 没显式指定来源时：按有没有券码决定用券还是不用优惠。
-    // 会员奖励只在店员显式选择时使用（前端传 discount_source='member_reward'），
-    // 那条路径同样由数据库复核金额，最终以服务端算出来的为准。
-    const source: DiscountSource = body.discount_source
-      ?? (body.coupon_code ? 'coupon' : 'none')
+    if (threshold && body.coupon_code?.trim()) {
+      return NextResponse.json({ error: mapMemberError('MEMBER_DISCOUNT_CONFLICTS_WITH_COUPON') }, { status: 409 })
+    }
+
+    const source: DiscountSource = threshold
+      ? 'member_reward'
+      : (body.coupon_code ? 'coupon' : 'none')
 
     let discountPence: number
     let preview: unknown
@@ -165,7 +181,7 @@ export async function PATCH(
     } else {
       const computed = computeMemberDiscount(source, {
         amountGbp:  ctx.context.session.amount_gbp,
-        rewardType: body.reward_type ?? null,
+        rewardType: threshold?.rewardType ?? null,
       })
       if (!computed.ok) return NextResponse.json({ error: mapMemberError(computed.error) }, { status: 400 })
       discountPence = computed.preview.discountAmountPence
@@ -173,8 +189,6 @@ export async function PATCH(
     }
 
     // 金额一律服务端算好传进去，数据库再拿自己的记录复核一遍，对不上就报错。
-    // 会员参数只在真的用到会员折扣时传：迁移还没上的环境里旧版函数只有五个参数，
-    // 多传参数会让店员连普通结算都做不了。
     const rpcParams: Record<string, unknown> = {
       p_session_id:            id,
       p_settled_by:            user.email ?? user.id,
@@ -185,7 +199,7 @@ export async function PATCH(
     if (source === 'member_reward') {
       rpcParams.p_discount_source = source
       rpcParams.p_member_id       = sessionMemberId
-      rpcParams.p_reward_type     = body.reward_type ?? null
+      rpcParams.p_reward_type     = threshold?.rewardType ?? null
     }
 
     const { data: settled, error: rpcErr } = await admin.rpc('settle_timer_session', rpcParams)
@@ -205,7 +219,14 @@ export async function PATCH(
         .in('status', ['confirmed', 'payment_pending'])
     }
 
-    return NextResponse.json({ session: settled, preview, discount_source: source })
+    return NextResponse.json({
+      session: settled,
+      preview,
+      discount_source: source,
+      member_threshold: threshold
+        ? { rewardType: threshold.rewardType, threshold: threshold.threshold }
+        : null,
+    })
   }
 
   // ── 撤销结算（同一事务内恢复优惠券）─────────────────────────────────────────

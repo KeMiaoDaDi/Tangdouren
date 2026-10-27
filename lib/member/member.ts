@@ -1,19 +1,20 @@
 // ============================================================
-// 会员：Visit 口径、奖励进度、奖励可用性与折扣计算的纯函数
+// 会员：Visit 口径、到店进度与「达标自动打折」的纯函数
 //
-// 奖励机制（2026-10 改版）：每 10 个 Reward-eligible Visit 为一轮，
-// 到第 3 / 5 / 7 / 10 次各解锁一张「一次性百分比折扣」奖励：
+// 折扣机制（2026-10 改版）：每 10 个 Reward-eligible Visit 为一轮，
+// 到第 3 / 5 / 7 / 10 次的那一单自动打对应折扣：
 //   第 3 次 → 9折（10% off）
 //   第 5 次 → 8折（20% off）
 //   第 7 次 → 7折（30% off）
 //   第 10 次 → 5折（50% off）
 // 第 2 轮及以后靠 10 ×(轮次 - 1) + 档位 推到 13 / 15 / 17 / 20，无限循环。
-// 所有奖励都是「本人订单的百分比折扣」，核销一次即用掉，不可转赠。
+// 折扣只在「达到次数的那一单」生效（且当天只打第一笔计入进度的消费），
+// 不落成可稍后核销的券。
 //
 // 约定：
 //   1) 金额一律换算成「便士整数」计算，与 lib/coupon/coupon.ts 同一套口径。
 //   2) 折扣金额在这里算一遍，settle_timer_session 会拿数据库记录再复核一遍，
-//      对不上就报错。改这里必须同步改 supabase/migrations/017_member_settlement.sql。
+//      对不上就报错。改这里必须同步改 supabase/migrations/018_member_threshold_discount.sql。
 //   3) 本文件不碰数据库、不碰 React，可在浏览器、服务端与测试里共用。
 // ============================================================
 
@@ -38,10 +39,10 @@ export const REWARD_DISCOUNT_PERCENT: Record<RewardType, number> = {
   P50_OFF: 50,
 }
 
-/** 一次结算只允许一个折扣来源（会员奖励不再有 VIP 月卡这条来源） */
+/** 一次结算只允许一个折扣来源（会员折扣与优惠券互斥） */
 export type DiscountSource = 'none' | 'coupon' | 'member_reward'
 
-/** 一轮里各档位的门槛与对应奖励。第 2 轮及以后靠 10 ×(轮次 - 1) + 档位 推到 13 / 15 / 17 / 20 */
+/** 一轮里各档位的门槛与对应折扣。第 2 轮及以后靠 10 ×(轮次 - 1) + 档位 推到 13 / 15 / 17 / 20 */
 export const CYCLE_REWARD_NODES: readonly { node: number; rewardTypes: readonly RewardType[] }[] = [
   { node: 3,  rewardTypes: ['P10_OFF'] },
   { node: 5,  rewardTypes: ['P20_OFF'] },
@@ -49,19 +50,10 @@ export const CYCLE_REWARD_NODES: readonly { node: number; rewardTypes: readonly 
   { node: 10, rewardTypes: ['P50_OFF'] },
 ]
 
-/** 可以在结算台作为折扣使用的奖励类型（现在全部奖励都是折扣，四档都在内） */
+/** 全部可用的折扣类型（四档都在内） */
 export const USABLE_REWARD_TYPES: readonly RewardType[] = [
   'P10_OFF', 'P20_OFF', 'P30_OFF', 'P50_OFF',
 ]
-
-export interface MemberRewardRow {
-  reward_id:      string
-  member_id:      string
-  reward_type:    RewardType
-  cycle_index:    number
-  unlocked_at:    string
-  used_at:        string | null
-}
 
 // ── 身份 ────────────────────────────────────────────────────────────────────
 
@@ -108,9 +100,11 @@ export interface VisitSessionRow {
   started_at:      string
   is_settled:      boolean
   reward_eligible: boolean | null
-  /** 下面两个只有会员页要用来展示「这一单走了什么折扣」，Visit 口径本身不需要 */
+  /** 下面几个只有会员页要用来展示「这一单走了什么折扣」，Visit 口径本身不需要 */
   discount_amount_gbp?: number | null
   coupon_code_snapshot?: string | null
+  discount_source_snapshot?: string | null
+  discount_value_snapshot?: number | null
 }
 
 export interface VisitDay {
@@ -148,34 +142,11 @@ export function countRewardProgress(visits: VisitDay[]): number {
   return visits.filter(v => v.reward_eligible).length
 }
 
-// ── 轮次、进度与解锁 ────────────────────────────────────────────────────────
+// ── 轮次、进度与达标 ────────────────────────────────────────────────────────
 
 /** 第 cycle 轮第 node 个档位对应的累计 Progress */
 export function rewardThreshold(cycleIndex: number, node: number): number {
   return REWARD_CYCLE_SIZE * (cycleIndex - 1) + node
-}
-
-export interface UnlockedReward {
-  cycle_index: number
-  reward_type: RewardType
-  threshold:   number
-}
-
-/** 当前 Progress 应该已经解锁的全部奖励。与 ensure_member_rewards 的循环同一个规则 */
-export function unlockedRewardsForProgress(progress: number): UnlockedReward[] {
-  if (progress <= 0) return []
-  const unlocked: UnlockedReward[] = []
-  const cycles = Math.floor((progress - 1) / REWARD_CYCLE_SIZE) + 1
-  for (let cycle = 1; cycle <= cycles; cycle++) {
-    for (const { node, rewardTypes } of CYCLE_REWARD_NODES) {
-      const threshold = rewardThreshold(cycle, node)
-      if (progress < threshold) continue
-      for (const reward_type of rewardTypes) {
-        unlocked.push({ cycle_index: cycle, reward_type, threshold })
-      }
-    }
-  }
-  return unlocked
 }
 
 export interface NextReward {
@@ -186,7 +157,7 @@ export interface NextReward {
   rewardTypes: readonly RewardType[]
 }
 
-/** 还差几次到下一个奖励 */
+/** 还差几次到下一个折扣档位 */
 export function nextReward(progress: number): NextReward | null {
   const cycle = Math.floor(progress / REWARD_CYCLE_SIZE) + 1
   for (const { node, rewardTypes } of CYCLE_REWARD_NODES) {
@@ -232,49 +203,47 @@ export function progressBarCells(progress: number): ProgressCell[] {
   })
 }
 
-// ── 奖励可用性 ──────────────────────────────────────────────────────────────
+// ── 达标自动打折 ────────────────────────────────────────────────────────────
 
-export type RewardState = 'available' | 'used'
-
-export interface RewardAvailability {
-  reward: MemberRewardRow
-  state:  RewardState
+/** 累计 Progress 落在哪个档位（3/5/7/10 循环），没落档返回 null */
+export function rewardTypeForNode(node: number): RewardType | null {
+  if (node <= 0) return null
+  const m = node % REWARD_CYCLE_SIZE
+  if (m === 3) return 'P10_OFF'
+  if (m === 5) return 'P20_OFF'
+  if (m === 7) return 'P30_OFF'
+  if (m === 0) return 'P50_OFF'
+  return null
 }
 
-/** 单个奖励当前能不能用：已用 → 可用（不再有转赠、VIP 暂停两类状态） */
-export function rewardState(reward: MemberRewardRow): RewardState {
-  return reward.used_at ? 'used' : 'available'
-}
-
-/** My Rewards 列表：已用的标成不可用，不隐藏 */
-export function rewardAvailabilityList(rewards: MemberRewardRow[]): RewardAvailability[] {
-  return rewards.map(reward => ({ reward, state: rewardState(reward) }))
+export interface ThresholdDiscount {
+  rewardType: RewardType
+  threshold:  number   // 累计 Progress，例如 3 / 13
 }
 
 /**
- * 结算台挑券：同类奖励里挑「最早解锁且未使用」的一张。
- * 排序与 SQL 的 ORDER BY unlocked_at, reward_id 保持一致，否则预览与实际核销会对不上。
+ * 结算前判断这一单要不要自动打折。
+ * 只有「当天第一笔计入进度」且累计 Progress 恰好落到档位（3/5/7/10/13/…）时才打折；
+ * 否则返回 null（原价）。这天然实现了「只打第一笔」：同一天后续消费不再产生新访日。
  */
-export function pickRewardForUse(
-  rewards: MemberRewardRow[],
-  rewardType: RewardType,
-  excludeSessionId?: string | null,
-): MemberRewardRow | null {
-  const candidates = rewards
-    .filter(r => r.reward_type === rewardType)
-    .filter(r => rewardState(r) === 'available')
-    .filter(r => !excludeSessionId || r.reward_id !== excludeSessionId)
-    .sort((a, b) => a.unlocked_at.localeCompare(b.unlocked_at) || a.reward_id.localeCompare(b.reward_id))
-  return candidates[0] ?? null
+export function thresholdDiscountForSettlement(
+  priorProgress: number,
+  isNewVisitDay: boolean,
+): ThresholdDiscount | null {
+  if (!isNewVisitDay) return null
+  const node = priorProgress + 1
+  const rewardType = rewardTypeForNode(node)
+  if (!rewardType) return null
+  return { rewardType, threshold: node }
 }
 
-/** 会员当前可选的奖励类型（去重，供结算台下拉用） */
-export function usableRewardTypes(rewards: MemberRewardRow[]): RewardType[] {
-  const types = rewards
-    .filter(r => USABLE_REWARD_TYPES.includes(r.reward_type))
-    .filter(r => rewardState(r) === 'available')
-    .map(r => r.reward_type)
-  return [...new Set(types)]
+/** 从折扣快照的 discount_value（10/20/30/50）反推 RewardType，用于到店记录标注 */
+export function rewardTypeFromDiscountValue(value: number | null | undefined): RewardType | null {
+  if (value === null || value === undefined) return null
+  for (const rt of USABLE_REWARD_TYPES) {
+    if (REWARD_DISCOUNT_PERCENT[rt] === value) return rt
+  }
+  return null
 }
 
 // ── 折扣计算 ────────────────────────────────────────────────────────────────
@@ -308,7 +277,7 @@ export interface MemberDiscountContext {
 
 /**
  * 会员折扣的唯一计算入口（与 computeSettlement 并列，互不叠加）。
- * 错误码与 017 里 settle_timer_session 抛出的错误码同名，前端可以直接按码给文案。
+ * 错误码与 018 里 settle_timer_session 抛出的错误码同名，前端可以直接按码给文案。
  */
 export function computeMemberDiscount(
   source: DiscountSource,

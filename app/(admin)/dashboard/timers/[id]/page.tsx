@@ -35,6 +35,7 @@ interface TimerSession {
   // 优惠券快照字段
   coupon_id:                  string | null
   coupon_code_snapshot:       string | null
+  discount_source_snapshot:   'coupon' | 'member' | null
   discount_type_snapshot:     DiscountType | null
   discount_value_snapshot:    number | null
   discount_amount_gbp:        number | null
@@ -54,10 +55,10 @@ interface CouponPreview {
 
 // 结算台需要的那一小块会员信息（由 GET /api/admin/timers/[id] 一并返回）
 interface MemberSettleInfo {
-  member_id:           string
-  display_name:        string | null
-  email:               string
-  usable_reward_types: RewardType[]
+  member_id:          string
+  display_name:       string | null
+  email:              string
+  threshold_discount: { rewardType: RewardType; threshold: number } | null
 }
 
 const memberRewardLabels: Record<RewardType, string> = {
@@ -393,16 +394,15 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
   const [verifying,  setVerifying]  = useState(false)
   const [saving,     setSaving]     = useState(false)
   const [error,      setError]      = useState('')
-  const [rewardType, setRewardType] = useState<RewardType | null>(null)
+
+  const threshold = member?.threshold_discount ?? null
 
   /** 会员折扣的预览。金额规则与数据库复核用的是同一套（lib/member/member.ts） */
   const memberPreview = (() => {
-    if (!member) return null
-    const effective: DiscountSource = rewardType ? 'member_reward' : 'none'
-    if (effective === 'none') return null
-    const computed = computeMemberDiscount(effective, {
+    if (!threshold) return null
+    const computed = computeMemberDiscount('member_reward', {
       amountGbp:  session.amount_gbp,
-      rewardType,
+      rewardType: threshold.rewardType,
     })
     return computed.ok ? computed.preview : null
   })()
@@ -414,6 +414,9 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
   if (session.is_settled) {
     const couponContent = session.discount_type_snapshot && session.discount_value_snapshot !== null
       ? describeDiscount(session.discount_type_snapshot, session.discount_value_snapshot)
+      : null
+    const memberDiscountContent = session.discount_source_snapshot === 'member' && session.discount_value_snapshot !== null
+      ? describeDiscount('percentage_off', session.discount_value_snapshot)
       : null
     return (
       <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4">
@@ -438,6 +441,18 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
               <div className="flex justify-between">
                 <span className="text-stone-500">优惠内容</span>
                 <span className="font-medium text-stone-700">{couponContent ?? '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">优惠金额</span>
+                <span className="font-medium text-terracotta">−{money(session.discount_amount_gbp ?? 0)}</span>
+              </div>
+            </>
+          )}
+          {session.discount_source_snapshot === 'member' && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-stone-500">会员折扣</span>
+                <span className="font-medium text-stone-700">{memberDiscountContent ?? '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500">优惠金额</span>
@@ -514,13 +529,13 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
   }
 
   async function handleSettle() {
-    // 一次结算只能有一个折扣来源
-    const effectiveSource: DiscountSource = rewardType
+    // 达标会员自动打折；否则按有没有券码决定用券还是原价。服务端会再复核一遍。
+    const effectiveSource: DiscountSource = threshold
       ? 'member_reward'
       : code.trim() ? 'coupon' : 'none'
 
     if (effectiveSource === 'coupon' && !preview) { setError('请先点击「验证」确认优惠码'); return }
-    if (effectiveSource === 'member_reward' && !memberPreview) { setError('该会员奖励当前不可用'); return }
+    if (effectiveSource === 'member_reward' && !memberPreview) { setError('该会员折扣当前不可用'); return }
     setError('')
     setSaving(true)
     try {
@@ -530,8 +545,6 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
         body: JSON.stringify({
           action:          'settle',
           coupon_code:     effectiveSource === 'coupon' ? code.trim().toUpperCase() : undefined,
-          discount_source: effectiveSource,
-          reward_type:     effectiveSource === 'member_reward' ? rewardType : undefined,
           settlement_note: note || null,
         }),
       })
@@ -617,35 +630,17 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
         </p>
       )}
 
-      {/* 会员优惠 */}
+      {/* 会员自动折扣 */}
       {member && (
         <div className="mb-4">
-          <label className="block text-xs text-stone-400 mb-1">会员优惠</label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => { setRewardType(null); setError('') }}
-              className={rewardType === null
-                ? 'px-3 py-1.5 rounded-xl bg-terracotta text-white text-sm font-medium'
-                : 'px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-600 text-sm hover:border-terracotta/40'}
-            >
-              不使用会员奖励
-            </button>
-            {member.usable_reward_types.map(rt => (
-              <button
-                key={rt}
-                onClick={() => { setRewardType(rt); setCode(''); setPreview(null); setError('') }}
-                className={rewardType === rt
-                  ? 'px-3 py-1.5 rounded-xl bg-terracotta text-white text-sm font-medium'
-                  : 'px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-600 text-sm hover:border-terracotta/40'}
-              >
-                {memberRewardLabels[rt]}
-              </button>
-            ))}
-          </div>
-          {member.usable_reward_types.length === 0 && (
-            <p className="mt-1 text-xs text-stone-400">该会员当前没有可用的奖励。</p>
+          <label className="block text-xs text-stone-400 mb-1">会员折扣</label>
+          {threshold ? (
+            <div className="rounded-xl bg-terracotta/5 border border-terracotta/20 px-3 py-2 text-sm text-terracotta">
+              本次到店是第 {threshold.threshold} 次，享 {memberRewardLabels[threshold.rewardType]}（自动）。
+            </div>
+          ) : (
+            <p className="text-xs text-stone-400">本次到店不享会员折扣。</p>
           )}
-          <p className="mt-1 text-xs text-stone-400">同类多张时系统自动核销最早解锁的一张；刚解锁的奖励要下一次消费才能用。</p>
         </div>
       )}
 
@@ -656,20 +651,22 @@ function SettlementPanel({ session, member, onSettled }: { session: TimerSession
           <input
             className={inputCls + ' font-mono'}
             placeholder="TDXXXXXXXX"
-            disabled={rewardType !== null}
+            disabled={Boolean(threshold)}
             value={code}
             onChange={e => { setCode(e.target.value.toUpperCase()); setPreview(null); setError('') }}
             onKeyDown={e => e.key === 'Enter' && handleVerify()}
           />
           <button
             onClick={handleVerify}
-            disabled={verifying || !code.trim() || rewardType !== null}
+            disabled={verifying || !code.trim() || Boolean(threshold)}
             className="px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-medium hover:bg-stone-700 disabled:opacity-50 transition shrink-0"
           >
             {verifying ? '验证中…' : '验证'}
           </button>
         </div>
-        <p className="text-xs text-stone-400 mt-1">验证只做预览，不会核销；确认结算时才会真正使用。</p>
+        <p className="text-xs text-stone-400 mt-1">
+          {threshold ? '本次已享会员折扣，不能叠加优惠券。' : '验证只做预览，不会核销；确认结算时才会真正使用。'}
+        </p>
       </div>
 
       {/* 优惠预览 */}

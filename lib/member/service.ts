@@ -1,9 +1,9 @@
 // ============================================================
 // 会员服务端辅助：身份识别与加入、会员页数据、后台动作
 // 说明：
-//   1) 所有写入都走 service role 客户端（会员两张表只开 RLS、不建策略）。
-//   2) 涉及多表的动作（挂订单）走 017 里的数据库函数，不在应用层拼事务。
-//   3) 这里只做数据库读写与组装；进度、奖励、折扣的口径一律来自 lib/member/member.ts。
+//   1) 所有写入都走 service role 客户端（会员表只开 RLS、不建策略）。
+//   2) 涉及多表的动作（挂订单、结算）走数据库函数，不在应用层拼事务。
+//   3) 这里只做数据库读写与组装；进度、折扣的口径一律来自 lib/member/member.ts。
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -11,7 +11,6 @@ import {
   buildVisitDays,
   londonDateOf,
   maskEmail,
-  usableRewardTypes,
   nextReward,
   normalizeMemberEmail,
   progressBarCells,
@@ -19,10 +18,9 @@ import {
   countLifetimeVisits,
   countRewardProgress,
   isValidMemberEmail,
-  rewardAvailabilityList,
-  type MemberRewardRow,
+  rewardTypeFromDiscountValue,
+  thresholdDiscountForSettlement,
   type ProgressCell,
-  type RewardAvailability,
   type NextReward,
   type RewardType,
   type VisitSessionRow,
@@ -127,13 +125,7 @@ export interface MemberVisitEntry {
   started_at:            string
   counted_for_progress:  boolean
   progress_paused:       boolean          // false = 后台补挂，只计 Lifetime，不计进度
-  used_reward:           RewardType | null
-}
-
-export interface MemberRewardEntry {
-  reward:              MemberRewardRow
-  state:               RewardAvailability['state']
-  cycle_index:         number
+  used_reward:           RewardType | null // 这一单享的会员折扣（无则 null）
 }
 
 export interface MemberDashboard {
@@ -149,7 +141,6 @@ export interface MemberDashboard {
   cycle_progress:  number
   next_reward:     NextReward | null
   progress_cells:  ProgressCell[]
-  rewards:         MemberRewardEntry[]
   visit_history:   MemberVisitEntry[]
 }
 
@@ -157,7 +148,7 @@ export interface MemberDashboard {
 async function loadMemberSessions(admin: AdminClient, memberId: string, limit: number) {
   const { data, error } = await admin
     .from('timer_sessions')
-    .select('session_id, member_id, started_at, is_settled, reward_eligible, amount_gbp, actual_amount_gbp, discount_amount_gbp, coupon_code_snapshot')
+    .select('session_id, member_id, started_at, is_settled, reward_eligible, amount_gbp, actual_amount_gbp, discount_amount_gbp, coupon_code_snapshot, discount_source_snapshot, discount_value_snapshot')
     .eq('member_id', memberId)
     .order('started_at', { ascending: false })
     .limit(limit)
@@ -176,18 +167,8 @@ export async function getMemberDashboard(
 
   const sessions = await loadMemberSessions(admin, memberId, 500)
 
-  const { data: rewardRows, error: rewardErr } = await admin
-    .from('member_rewards')
-    .select('reward_id, member_id, reward_type, cycle_index, unlocked_at, used_at, used_session_id')
-    .eq('member_id', memberId)
-    .order('unlocked_at', { ascending: true })
-
-  if (rewardErr) throw new Error('MEMBER_REWARDS_FAILED')
-  const rewards = (rewardRows ?? []) as (MemberRewardRow & { used_session_id: string | null })[]
-
-  const visits      = buildVisitDays(sessions)
-  const progress    = countRewardProgress(visits)
-  const usedBySession = new Map(rewards.filter(r => r.used_session_id).map(r => [r.used_session_id as string, r.reward_type]))
+  const visits   = buildVisitDays(sessions)
+  const progress = countRewardProgress(visits)
 
   const limit = options.visitLimit ?? 10
   const visitHistory: MemberVisitEntry[] = sessions
@@ -199,7 +180,9 @@ export async function getMemberDashboard(
       started_at:           s.started_at,
       counted_for_progress: Boolean(s.reward_eligible),
       progress_paused:      s.reward_eligible === false,
-      used_reward:          usedBySession.get(s.session_id) ?? null,
+      used_reward:          s.discount_source_snapshot === 'member'
+        ? rewardTypeFromDiscountValue(s.discount_value_snapshot)
+        : null,
     }))
 
   return {
@@ -215,11 +198,6 @@ export async function getMemberDashboard(
     cycle_progress:  cycleProgress(progress),
     next_reward:     nextReward(progress),
     progress_cells:  progressBarCells(progress),
-    rewards: rewards.map(reward => ({
-      reward,
-      state:       rewardAvailabilityList([reward])[0].state,
-      cycle_index: reward.cycle_index,
-    })),
     visit_history: visitHistory,
   }
 }
@@ -227,36 +205,39 @@ export async function getMemberDashboard(
 
 // ── 结算台需要的数据 ────────────────────────────────────────────────────────
 
-export interface MemberSettleInfo {
-  member:        MemberRow
-  usableTypes:   RewardType[]
-  rewards:       MemberRewardRow[]
+export interface MemberThresholdDiscount {
+  rewardType:     RewardType
+  threshold:      number      // 累计 Progress，例如 3 / 13
+  priorProgress:  number
+  isNewVisitDay:  boolean
 }
 
 /**
- * 结算台要用的一小块数据：会员当前能选哪些奖励。
- * 金额与资格最终由数据库复核，这里只负责给店员看的那一份预览。
+ * 判断这一单要不要自动打折：查该会员已结算的订单，用 buildVisitDays 得到
+ * 「这单之前」的进度与当天是否已有计入进度的消费。
+ * 与 settle_timer_session 里的 SQL 口径一致（member_visit_days）。
  */
-export async function getMemberSettleInfo(
+export async function getMemberThresholdDiscount(
   admin: AdminClient,
   memberId: string,
-): Promise<MemberSettleInfo | null> {
-  const member = await findMemberById(admin, memberId)
-  if (!member) return null
-
-  const { data: rewardRows } = await admin
-    .from('member_rewards')
-    .select('reward_id, member_id, reward_type, cycle_index, unlocked_at, used_at')
+  session: { session_id: string; started_at: string },
+): Promise<MemberThresholdDiscount | null> {
+  const { data: rows, error } = await admin
+    .from('timer_sessions')
+    .select('member_id, started_at, is_settled, reward_eligible')
     .eq('member_id', memberId)
-    .order('unlocked_at', { ascending: true })
+    .eq('is_settled', true)
 
-  const rewards = (rewardRows ?? []) as MemberRewardRow[]
+  if (error) throw new Error('MEMBER_SESSIONS_FAILED')
 
-  return {
-    member,
-    usableTypes: usableRewardTypes(rewards),
-    rewards,
-  }
+  const visits        = buildVisitDays((rows ?? []) as VisitSessionRow[])
+  const priorProgress = countRewardProgress(visits)
+  const date          = londonDateOf(session.started_at)
+  const isNewVisitDay = !visits.some(v => v.visit_date === date && v.reward_eligible)
+
+  const d = thresholdDiscountForSettlement(priorProgress, isNewVisitDay)
+  if (!d) return null
+  return { ...d, priorProgress, isNewVisitDay }
 }
 
 // ── 错误文案 ────────────────────────────────────────────────────────────────
@@ -273,19 +254,16 @@ export function mapMemberError(message: string | undefined | null): string {
     ['MEMBER_LOOKUP_FAILED',            '查询失败，请重试'],
     ['MEMBER_UPDATE_FAILED',            '更新失败，请重试'],
     ['MEMBER_SESSIONS_FAILED',          '读取到店记录失败，请重试'],
-    ['MEMBER_REWARDS_FAILED',           '读取奖励失败，请重试'],
     ['MEMBER_LIST_FAILED',              '读取会员列表失败，请重试'],
     ['SESSION_NOT_FOUND',               '计时订单不存在'],
     ['SESSION_ALREADY_SETTLED',         '该订单已经结算过了'],
     ['SESSION_ALREADY_LINKED',          '该订单已经属于别的会员，不能改归属'],
     ['MEMBER_REQUIRED',                 '该订单没有关联会员'],
-    ['MEMBER_SESSION_MISMATCH',         '这类奖励只能用于本人的订单，请先把订单关联到会员'],
-    ['MEMBER_REWARD_NOT_FOUND',         '找不到该奖励'],
-    ['MEMBER_REWARD_UNAVAILABLE',       '该会员当前没有可用的这类奖励'],
-    ['MEMBER_REWARD_ALREADY_USED',      '该奖励已经用过了'],
-    ['MEMBER_REWARD_UPDATE_FAILED',     '奖励更新失败，请重试'],
-    ['REWARD_TYPE_INVALID',             '奖励类型无效'],
-    ['REWARD_ALREADY_USED',             '这个订单解锁的奖励已经被用掉了，需要管理员处理'],
+    ['MEMBER_SESSION_MISMATCH',         '会员折扣只能用于本人的订单，请先把订单关联到会员'],
+    ['MEMBER_DISCOUNT_REQUIRED',        '本次到店达到会员折扣次数，需按会员折扣结算'],
+    ['MEMBER_DISCOUNT_CONFLICTS_WITH_COUPON', '本次到店已享会员折扣，不能叠加优惠券'],
+    ['MEMBER_THRESHOLD_NOT_MET',        '本次到店不满足会员折扣条件，请刷新后重试'],
+    ['REWARD_TYPE_INVALID',             '折扣类型无效'],
     ['MULTIPLE_DISCOUNT_SOURCES',       '一个订单只能使用一种优惠'],
     ['DISCOUNT_SOURCE_INVALID',         '优惠类型无效'],
     ['DISCOUNT_AMOUNT_INVALID',         '优惠金额异常，请重新选择'],

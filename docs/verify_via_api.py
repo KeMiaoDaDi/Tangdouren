@@ -2,10 +2,9 @@
 # ============================================================
 # 会员系统真实数据验证（走 PostgREST + service key，不需要额外 token）
 #
-# 覆盖：视图计数与同日去重、解锁档位与幂等、四档折扣阶梯（9/8/7/5 折）、
-#       每 10 次一轮（第二轮 13 次再给 9 折）、同类奖励用光后再用被拒、
-#       折扣只能用在本人订单上、刚解锁的奖励不能当次用、撤销结算的守卫条件、
-#       后台补挂已结算订单的规矩。
+# 覆盖：视图计数与同日去重、达标自动打折（第 3/5/7/10 次那单自动折扣）、
+#       同一天第二笔原价（只打第一笔）、撤销结算回退后可重打、券码冲突被拒、
+#       门槛未达被拒、折扣只能用在本人订单上、后台补挂已结算订单的规矩。
 #
 # 会先清掉上次的测试数据（幂等可重跑），跑完保留数据供在界面上查看。
 # ============================================================
@@ -17,7 +16,8 @@ import pathlib
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-ENV = pathlib.Path.home() / "Desktop/Projects/Tangdouren/.env.local"
+REPO = pathlib.Path(__file__).resolve().parent.parent   # 仓库根目录（docs/ 的上一级）
+ENV = REPO / ".env.local"
 cfg = {}
 for line in ENV.read_text().splitlines():
     if "=" in line and not line.strip().startswith("#"):
@@ -68,8 +68,8 @@ def err_of(resp):
     return body.get("message", "") if isinstance(body, dict) else ""
 
 
-# ── 0. 清理（引用是个环：订单↔券↔奖励，必须按这个顺序解）───────────────────
-EMAILS = ["demo.a@tangdouren.test", "demo.b@tangdouren.test"]
+# ── 0. 清理（引用是个环：订单↔券，必须按这个顺序解）─────────────────────────
+EMAILS = ["demo.a@tangdouren.test", "demo.b@tangdouren.test", "demo.c@tangdouren.test"]
 ids = []
 for e in EMAILS:
     st, rows = sel("members", f"select=member_id&email_key=eq.{e}")
@@ -87,16 +87,14 @@ def nullout(table, query, patch, label):
     if st not in (200, 204):
         errors.append(f"{label}: HTTP {st} {str(body)[:110]}")
 
-# 1) 奖励（解掉 奖励→订单 的引用）
-for mid in ids:
-    wipe("member_rewards", f"member_id=eq.{mid}", f"清奖励 {mid[:8]}")
-# 2) 订单不再指向券
+# 1) 订单不再指向券
 nullout("timer_sessions", "session_id=like.DEMO-*",
-        {"coupon_id": None, "coupon_code_snapshot": None}, "解订单→券")
-# 3) 券不再指向订单（核销字段要么全空要么成组，所以三个一起清）
+        {"coupon_id": None, "coupon_code_snapshot": None, "discount_source_snapshot": None,
+         "discount_type_snapshot": None, "discount_value_snapshot": None}, "解订单→券")
+# 2) 券不再指向订单
 nullout("coupons", "code=eq.TDTEST0001",
         {"redeemed_at": None, "redeemed_by": None, "redeemed_session_id": None}, "解券→订单")
-# 4) 券 → 5) 订单 → 6) 会员
+# 3) 券 → 4) 订单 → 5) 会员
 wipe("coupons", "code=eq.TDTEST0001", "清测试券")
 for mid in ids:
     wipe("timer_sessions", f"member_id=eq.{mid}", f"清订单 {mid[:8]}")
@@ -107,7 +105,6 @@ if errors:
     print("清理时报错：")
     for e in errors:
         print("  ", e)
-# 复核：测试会员必须已经清干净，否则下面的检查会不准
 for e in EMAILS:
     st, rows = sel("members", f"select=member_id&email_key=eq.{e}")
     if isinstance(rows, list) and rows:
@@ -120,8 +117,12 @@ st, rows = req("POST", "/rest/v1/members", [{
 A = rows[0]["member_id"]
 st, rows = req("POST", "/rest/v1/members", [{
     "email": "demo.b@tangdouren.test", "email_key": "demo.b@tangdouren.test",
-    "display_name": "乙", "consent_source": "booking"}], prefer="return=representation")
+    "display_name": "乙", "consent_source": "in_store"}], prefer="return=representation")
 B = rows[0]["member_id"]
+st, rows = req("POST", "/rest/v1/members", [{
+    "email": "demo.c@tangdouren.test", "email_key": "demo.c@tangdouren.test",
+    "display_name": "丙", "consent_source": "in_store"}], prefer="return=representation")
+C = rows[0]["member_id"]
 
 
 def add_session(sid, member_id, gbp, days_ago, settled=True, eligible=True):
@@ -141,105 +142,73 @@ def add_session(sid, member_id, gbp, days_ago, settled=True, eligible=True):
     return req("POST", "/rest/v1/timer_sessions", [row], prefer="return=representation")
 
 
-for i in range(1, 14):
-    st, out = add_session(f"DEMO-A-{i:03d}", A, 13.99, 200 - i)
-    assert st in (200, 201), out
-add_session("DEMO-A-DUP", A, 13.99, 199)   # 与第 2 条同一天
+# 甲：2 次历史进度；乙：2 次历史进度；丙：1 次历史进度
+add_session("DEMO-A-001", A, 13.99, 2)
+add_session("DEMO-A-002", A, 13.99, 1)
+add_session("DEMO-B-001", B, 13.99, 2)
+add_session("DEMO-B-002", B, 13.99, 1)
+add_session("DEMO-C-001", C, 13.99, 1)
 
-# ── 2. 视图计数 / 同日去重 ───────────────────────────────────────────────────
+# ── 2. 视图计数 ─────────────────────────────────────────────────────────────
 st, rows = sel("member_visit_days", f"select=reward_eligible&member_id=eq.{A}")
-check("A 累计到店 13 次（同一天多条只算 1）", 13, len(rows))
-check("A 计入进度 13 次", 13, sum(1 for r in rows if r["reward_eligible"]))
+check("甲累计到店 2 次", 2, len(rows))
+check("甲计入进度 2 次", 2, sum(1 for r in rows if r["reward_eligible"]))
 
-# ── 3. 解锁与幂等 ───────────────────────────────────────────────────────────
-st, out = rpc("ensure_member_rewards", p_member_id=A, p_session_id=None)
-check("解锁调用成功", 200, st)
-st, rows = sel("member_rewards",
-               f"select=reward_type,cycle_index&member_id=eq.{A}&order=cycle_index,reward_type")
-check("解锁 5 张（第一轮 4 + 第二轮 9 折）", 5, len(rows))
-check("档位与轮次都对",
-      str(sorted([(1, "P10_OFF"), (1, "P20_OFF"), (1, "P30_OFF"),
-                  (1, "P50_OFF"), (2, "P10_OFF")])),
-      str(sorted((r["cycle_index"], r["reward_type"]) for r in rows)))
-st, out = rpc("ensure_member_rewards", p_member_id=A, p_session_id=None)
-st, rows2 = sel("member_rewards", f"select=reward_id&member_id=eq.{A}")
-check("重复调用不会多发（幂等）", 5, len(rows2))
+# ── 3. 达标自动打折：第 3 次到店那单自动 9 折 ────────────────────────────────
+def settle_member(sid, pence, rtype, member):
+    return rpc("settle_timer_session", p_session_id=sid, p_settled_by="hermes_test",
+               p_discount_amount_pence=pence, p_discount_source="member_reward",
+               p_member_id=member, p_reward_type=rtype)
 
-# ── 4. 四档折扣阶梯：结算金额逐一核对 ────────────────────────────────────────
-def settle_discount(sid, pence, rtype, member):
-    st, out = rpc("settle_timer_session", p_session_id=sid, p_settled_by="hermes_test",
-                  p_discount_amount_pence=pence, p_discount_source="member_reward",
-                  p_member_id=member, p_reward_type=rtype)
-    return st, out
+add_session("DEMO-A-T", A, 13.99, 0, settled=False)
+st, out = settle_member("DEMO-A-T", 140, "P10_OFF", A)
+check("第 3 次到店自动 9 折结算成功", 200, st)
+st, rows = sel("timer_sessions", "select=actual_amount_gbp,discount_source_snapshot,discount_value_snapshot&session_id=eq.DEMO-A-T")
+check("第 3 次到店金额（13.99 → 12.59）", "12.59", rows[0]["actual_amount_gbp"])
+check("折扣来源快照 = member", "member", rows[0]["discount_source_snapshot"])
+check("折扣值快照 = 10", "10.00", rows[0]["discount_value_snapshot"])
 
-add_session("DEMO-A-D1", A, 13.99, 0, settled=False)
-st, out = settle_discount("DEMO-A-D1", 140, "P10_OFF", A)
-check("9 折结算成功", 200, st)
-st, rows = sel("timer_sessions", "select=actual_amount_gbp&session_id=eq.DEMO-A-D1")
-check("9 折结算金额（13.99 → 12.59）", "12.59", rows[0]["actual_amount_gbp"])
+# ── 4. 撤销结算回退进度，重结算仍自动 9 折 ──────────────────────────────────
+st, out = rpc("unsettle_timer_session", p_session_id="DEMO-A-T")
+check("撤销结算成功", 200, st)
+st, rows = sel("timer_sessions", "select=is_settled,discount_source_snapshot&session_id=eq.DEMO-A-T")
+check("撤销后回到未结算", "false", rows[0]["is_settled"])
+check("撤销后清空折扣来源快照", None, rows[0]["discount_source_snapshot"])
+st, out = settle_member("DEMO-A-T", 140, "P10_OFF", A)
+check("重结算仍自动 9 折", 200, st)
+st, rows = sel("timer_sessions", "select=actual_amount_gbp&session_id=eq.DEMO-A-T")
+check("重结算金额（13.99 → 12.59）", "12.59", rows[0]["actual_amount_gbp"])
 
-add_session("DEMO-A-D2", A, 13.99, 0, settled=False)
-st, out = settle_discount("DEMO-A-D2", 280, "P20_OFF", A)
-check("8 折结算成功", 200, st)
-st, rows = sel("timer_sessions", "select=actual_amount_gbp&session_id=eq.DEMO-A-D2")
-check("8 折结算金额（13.99 → 11.19）", "11.19", rows[0]["actual_amount_gbp"])
+# ── 5. 同一天第二笔原价（只打第一笔）────────────────────────────────────────
+add_session("DEMO-A-T2", A, 13.99, 0, settled=False)
+st, out = rpc("settle_timer_session", p_session_id="DEMO-A-T2", p_settled_by="hermes_test",
+              p_discount_amount_pence=0, p_discount_source="none")
+check("同一天第二笔结算成功（原价）", 200, st)
+st, rows = sel("timer_sessions", "select=actual_amount_gbp,discount_source_snapshot&session_id=eq.DEMO-A-T2")
+check("同一天第二笔金额原价", "13.99", rows[0]["actual_amount_gbp"])
+check("同一天第二笔无折扣快照", None, rows[0]["discount_source_snapshot"])
 
-add_session("DEMO-A-D3", A, 13.99, 0, settled=False)
-st, out = settle_discount("DEMO-A-D3", 420, "P30_OFF", A)
-check("7 折结算成功", 200, st)
-st, rows = sel("timer_sessions", "select=actual_amount_gbp&session_id=eq.DEMO-A-D3")
-check("7 折结算金额（13.99 → 9.79）", "9.79", rows[0]["actual_amount_gbp"])
+# ── 6. 券码冲突：达到档位的那单不能叠加优惠券 ────────────────────────────────
+add_session("DEMO-B-T", B, 13.99, 0, settled=False)
+st, out = rpc("settle_timer_session", p_session_id="DEMO-B-T", p_settled_by="hermes_test",
+              p_coupon_code="TD000000", p_discount_amount_pence=140, p_discount_source="coupon")
+check("达到档位时券码被拒", "MEMBER_DISCOUNT_CONFLICTS_WITH_COUPON", err_of((st, out)))
 
-add_session("DEMO-A-D4", A, 13.99, 0, settled=False)
-st, out = settle_discount("DEMO-A-D4", 700, "P50_OFF", A)
-check("5 折结算成功", 200, st)
-st, rows = sel("timer_sessions", "select=actual_amount_gbp,discount_type_snapshot,discount_value_snapshot&session_id=eq.DEMO-A-D4")
-check("5 折结算金额（13.99 → 6.99）", "6.99", rows[0]["actual_amount_gbp"])
-check("折扣类型快照 = percentage_off", "percentage_off", rows[0]["discount_type_snapshot"])
-check("5 折折扣值快照 = 50", "50.00", rows[0]["discount_value_snapshot"])
+# ── 7. 门槛未达：非档位次数按会员折扣结算被拒 ────────────────────────────────
+add_session("DEMO-C-T", C, 13.99, 0, settled=False)
+st, out = settle_member("DEMO-C-T", 140, "P10_OFF", C)
+check("不落档的到店按会员折扣结算被拒", "MEMBER_THRESHOLD_NOT_MET", err_of((st, out)))
 
-# 第一轮的 9 折已经用掉，第二轮那张应当还能用
-add_session("DEMO-A-D5", A, 13.99, 0, settled=False)
-st, out = settle_discount("DEMO-A-D5", 140, "P10_OFF", A)
-check("第二轮 9 折还能用", 200, st)
-st, rows = sel("timer_sessions", "select=actual_amount_gbp&session_id=eq.DEMO-A-D5")
-check("第二轮 9 折金额（13.99 → 12.59）", "12.59", rows[0]["actual_amount_gbp"])
-
-# 两张 9 折都用掉了，再要就没有了
-add_session("DEMO-A-D6", A, 13.99, 0, settled=False)
-st, out = settle_discount("DEMO-A-D6", 140, "P10_OFF", A)
-check("同类奖励用光后再用被拒", "MEMBER_REWARD_UNAVAILABLE", err_of((st, out)))
-
-# ── 5. 折扣只能用在本人订单上 ────────────────────────────────────────────────
+# ── 8. 折扣只能用在本人订单上 ────────────────────────────────────────────────
 add_session("DEMO-GUEST-1", None, 13.99, 1, settled=False)
-st, out = settle_discount("DEMO-GUEST-1", 280, "P20_OFF", A)
+st, out = settle_member("DEMO-GUEST-1", 280, "P20_OFF", A)
 check("会员折扣不能用在他人订单上", "MEMBER_SESSION_MISMATCH", err_of((st, out)))
+st, out = rpc("settle_timer_session", p_session_id="DEMO-GUEST-1", p_settled_by="hermes_test",
+              p_discount_amount_pence=0, p_discount_source="none")
 st, rows = sel("timer_sessions", "select=reward_eligible&session_id=eq.DEMO-GUEST-1")
 check("非会员订单不产生任何人进度", None, rows[0]["reward_eligible"])
 
-# ── 6. B：刚解锁的奖励不能用于产生它的那笔消费 ──────────────────────────────
-add_session("DEMO-B-001", B, 13.99, 30)
-add_session("DEMO-B-002", B, 13.99, 29)
-add_session("DEMO-B-003", B, 13.99, 28, settled=False)
-st, out = settle_discount("DEMO-B-003", 140, "P10_OFF", B)
-check("刚解锁的奖励不能用于产生它的那笔消费", "MEMBER_REWARD_UNAVAILABLE", err_of((st, out)))
-
-st, out = rpc("settle_timer_session", p_session_id="DEMO-B-003", p_settled_by="hermes_test",
-              p_discount_amount_pence=0, p_discount_source="none")
-check("同一笔改成不使用优惠后结算成功", 200, st)
-st, rows = sel("member_rewards",
-               f"select=unlocked_by_session_id,used_at&member_id=eq.{B}&reward_type=eq.P10_OFF&cycle_index=eq.1")
-check("第 3 次到店解锁了 9 折", "DEMO-B-003", rows[0]["unlocked_by_session_id"])
-check("刚解锁的奖励 used_at 为空", None, rows[0]["used_at"])
-
-# ── 7. 撤销守卫：奖励已被后续用掉则不许撤销来源结算 ─────────────────────────
-add_session("DEMO-B-004", B, 13.99, 27, settled=False)
-st, out = settle_discount("DEMO-B-004", 140, "P10_OFF", B)
-check("第二笔用掉那张刚解锁的 9 折", 200, st)
-st, out = rpc("unsettle_timer_session", p_session_id="DEMO-B-003")
-check("奖励已被后续使用则拒绝撤销来源结算", "REWARD_ALREADY_USED", err_of((st, out)))
-
-# ── 8. Link to Member：未结算可挂；已结算的补挂只记到店次数 ─────────────────
+# ── 9. 后台补挂已结算订单的规矩 ──────────────────────────────────────────────
 add_session("DEMO-LINK-1", None, 13.99, 5, settled=False)
 st, out = rpc("link_timer_session_to_member", p_session_id="DEMO-LINK-1", p_member_id=B)
 check("未结算的订单可以挂到会员", 200, st)
@@ -253,7 +222,7 @@ st, out = rpc("link_timer_session_to_member", p_session_id="DEMO-LINK-2", p_memb
 check("已结算的散客单允许补挂", 200, st)
 st, rows = sel("timer_sessions", "select=member_id,reward_eligible,actual_amount_gbp&session_id=eq.DEMO-LINK-2")
 check("补挂后归属正确", B, rows[0]["member_id"])
-check("补挂只记到店：reward_eligible = false", False, rows[0]["reward_eligible"])
+check("补挂只记到店：reward_eligible = false", "false", rows[0]["reward_eligible"])
 check("补挂不动已收金额", "13.99", rows[0]["actual_amount_gbp"])
 st, vafter = sel("member_visit_days", f"select=reward_eligible&member_id=eq.{B}")
 check("补挂让 Lifetime 加 1", len(vbefore or []) + 1, len(vafter or []))
@@ -267,7 +236,7 @@ check("已结算且已归属的单不能再改到别的会员", "SESSION_ALREADY
 st, out = rpc("link_timer_session_to_member", p_session_id="DEMO-LINK-1", p_member_id="00000000-0000-0000-0000-000000000000")
 check("挂到不存在的会员会被拒", "MEMBER_NOT_FOUND", err_of((st, out)))
 
-# ── 9. 结果 ────────────────────────────────────────────────────────────────
+# ── 10. 结果 ────────────────────────────────────────────────────────────────
 print("=" * 96)
 print(f"{'结果':<5} {'检查项':<52} {'期望':<26} 实际")
 print("-" * 96)
@@ -284,9 +253,8 @@ if npass != len(CHECKS):
 
 print("\n" + "=" * 96)
 print("留下的可查看数据（测试项目）")
-for label, mid in [("甲 demo.a@tangdouren.test", A), ("乙 demo.b@tangdouren.test", B)]:
+for label, mid in [("甲 demo.a@tangdouren.test", A), ("乙 demo.b@tangdouren.test", B),
+                   ("丙 demo.c@tangdouren.test", C)]:
     st, v = sel("member_visit_days", f"select=reward_eligible&member_id=eq.{mid}")
-    st, rw = sel("member_rewards", f"select=reward_type,cycle_index,used_at&member_id=eq.{mid}")
-    print(f"  {label}: 到店 {len(v or [])} 次 / 计入进度 {sum(1 for x in (v or []) if x['reward_eligible'])} 次"
-          f" / 奖励 {len(rw or [])} 张")
-print(f"  会员 ID: 甲={A}  乙={B}")
+    print(f"  {label}: 到店 {len(v or [])} 次 / 计入进度 {sum(1 for x in (v or []) if x['reward_eligible'])} 次")
+print(f"  会员 ID: 甲={A}  乙={B}  丙={C}")

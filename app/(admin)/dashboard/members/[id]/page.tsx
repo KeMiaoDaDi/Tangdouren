@@ -1,14 +1,15 @@
 'use client'
 
-// 后台会员详情（PRD 16）：能挂订单、核销、停用；
-// 不能手动加减 Visit、不能直接改 Reward Progress、不能改邮箱、不能删历史。
+// 后台会员详情（PRD 16）：能挂订单、停用；
+// 不能手动加减 Visit、不能直接改折扣进度、不能改邮箱、不能删历史。
+// 折扣在结算时由服务端按到店次数自动计算，后台只展示记录。
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Gift, Link2 } from 'lucide-react'
+import { ArrowLeft, Link2 } from 'lucide-react'
 import Sidebar from '@/components/admin/Sidebar'
 import MemberProgressBar from '@/components/member/MemberProgressBar'
-import type { MemberDashboard, MemberRewardEntry } from '@/lib/member/service'
+import type { MemberDashboard } from '@/lib/member/service'
 import type { RewardType } from '@/lib/member/member'
 
 interface MemberRow {
@@ -24,11 +25,6 @@ const rewardLabels: Record<RewardType, string> = {
   P20_OFF: '8折',
   P30_OFF: '7折',
   P50_OFF: '5折',
-}
-
-const stateLabels: Record<string, string> = {
-  available: '可用',
-  used:      '已使用',
 }
 
 export default function MemberDetailPage() {
@@ -148,26 +144,6 @@ export default function MemberDetailPage() {
                 />
               )}
 
-              {/* ── 奖励 ─────────────────────────────────────────────── */}
-              <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4 space-y-3">
-                <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Gift size={15} /> 奖励与记录</h2>
-                <ul className="space-y-2">
-                  {(dashboard?.rewards ?? []).map((entry: MemberRewardEntry) => (
-                    <li key={entry.reward.reward_id} className="rounded-xl border border-stone-100 px-3 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-stone-700">{rewardLabels[entry.reward.reward_type]}</span>
-                        <span className="text-xs text-stone-500">{stateLabels[entry.state] ?? entry.state}</span>
-                      </div>
-                      <p className="text-xs text-stone-400 mt-0.5">
-                        第 {entry.cycle_index} 轮 · {fmt(entry.reward.unlocked_at)} 解锁
-                        {entry.reward.used_at && ` · ${fmt(entry.reward.used_at)} 使用`}
-                      </p>
-                    </li>
-                  ))}
-                  {(dashboard?.rewards ?? []).length === 0 && <li className="text-sm text-stone-400">还没有解锁奖励。</li>}
-                </ul>
-              </div>
-
               {/* ── 挂订单 ───────────────────────────────────────────── */}
               <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4 space-y-3">
                 <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Link2 size={15} /> 把订单关联到该会员</h2>
@@ -200,7 +176,10 @@ export default function MemberDetailPage() {
                 <ul className="space-y-1.5">
                   {(dashboard?.visit_history ?? []).map(v => (
                     <li key={v.session_id} className="flex items-center justify-between text-sm border border-stone-100 rounded-xl px-3 py-2">
-                      <span className="text-stone-700">{v.visit_date}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-stone-700">{v.visit_date}</span>
+                        {v.used_reward && <span className="text-terracotta text-xs">本次享 {rewardLabels[v.used_reward]}</span>}
+                      </div>
                       <span className={v.counted_for_progress ? 'text-emerald-600 text-xs' : 'text-amber-600 text-xs'}>
                         {v.progress_paused ? '未计入进度（后台补挂）' : '计入进度'}
                       </span>
@@ -214,8 +193,8 @@ export default function MemberDetailPage() {
               <div className="rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4">
                 <p className="text-xs font-semibold text-amber-700 mb-1">后台不能做的事</p>
                 <p className="text-xs leading-5 text-amber-700">
-                  手动加减到店次数、直接改奖励进度、手动补发奖励、修改邮箱、删除到店或奖励历史。
-                  会员进度必须来自真实结算记录。金额也只在结算面板由服务端计算，后台改不了数字。
+                  手动加减到店次数、直接改折扣进度、修改邮箱、删除到店历史。
+                  会员进度必须来自真实结算记录；折扣在结算时由服务端按到店次数自动计算，后台改不了数字。
                 </p>
               </div>
             </>
